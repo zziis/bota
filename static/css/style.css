@@ -1,0 +1,491 @@
+:root {
+    --bg-main: #0a0915;
+    --bg-surface: #121026;
+    --bg-glass: rgba(22, 19, 48, 0.7);
+    --primary-cyan: #00f5d4;
+    --primary-purple: #9d4edd;
+    --primary-pink: #f72585;
+    --text-main: #ffffff;
+    --text-muted: #a0a5c0;
+    --danger-red: #ff3366;
+    --success-green: #06d6a0;
+    --border-glow: rgba(157, 78, 221, 0.35);
+    --radius-lg: 24px;
+    --radius-md: 16px;
+    --radius-sm: 10px;
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Cairo', system-ui, -apple-system, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+}
+
+body {
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    min-height: 100vh;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-image: 
+        radial-gradient(circle at 10% 20%, rgba(157, 78, 221, 0.18) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(0, 245, 212, 0.12) 0%, transparent 40%);
+}
+
+.app-container {
+    width: 100%;
+    max-width: 480px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    background: var(--bg-surface);
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+    overflow: hidden;
+}
+
+@media (min-width: 481px) {
+    .app-container {
+        height: 92vh;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border-glow);
+    }
+}
+
+/* شريط الرأس */
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    z-index: 20;
+}
+
+.logo-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.brand-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    object-fit: cover;
+    border: 2px solid var(--primary-purple);
+    box-shadow: 0 0 12px rgba(157, 78, 221, 0.5);
+}
+
+.brand-info h1 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    background: linear-gradient(135deg, #ffffff 20%, var(--primary-cyan) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.brand-tag {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.status-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ffaa00;
+    box-shadow: 0 0 8px #ffaa00;
+    transition: var(--transition);
+}
+
+.status-badge.connected .status-dot {
+    background: var(--success-green);
+    box-shadow: 0 0 8px var(--success-green);
+}
+
+.status-badge.calling .status-dot {
+    background: var(--primary-cyan);
+    box-shadow: 0 0 8px var(--primary-cyan);
+    animation: blink 1s infinite alternate;
+}
+
+/* مسرح المكالمة */
+.call-stage {
+    flex: 1;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    overflow: hidden;
+}
+
+.remote-stream-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.remote-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: var(--radius-md);
+}
+
+.remote-video.hidden {
+    display: none;
+}
+
+/* بطاقة المتصل الصوتي */
+.audio-avatar-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    z-index: 10;
+}
+
+.avatar-ring-pulse {
+    position: relative;
+    width: 140px;
+    height: 140px;
+    margin-bottom: 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.avatar-ring-pulse::before,
+.avatar-ring-pulse::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    border: 2px solid var(--primary-purple);
+    animation: ripple 2.5s infinite cubic-bezier(0.1, 0.2, 0.8, 1);
+}
+
+.avatar-ring-pulse::after {
+    animation-delay: 1.25s;
+    border-color: var(--primary-cyan);
+}
+
+.remote-avatar-img {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid var(--primary-cyan);
+    box-shadow: 0 0 30px rgba(0, 245, 212, 0.35);
+    z-index: 2;
+}
+
+.audio-avatar-card h3 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.role-tag {
+    font-size: 0.85rem;
+    color: var(--primary-cyan);
+    margin-bottom: 16px;
+}
+
+/* موجات الصوت التفاعلية */
+.voice-wave {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    height: 24px;
+}
+
+.voice-wave span {
+    width: 4px;
+    height: 8px;
+    background: var(--primary-cyan);
+    border-radius: 4px;
+    animation: wave 1.2s ease-in-out infinite;
+}
+
+.voice-wave span:nth-child(2) { animation-delay: 0.2s; height: 16px; }
+.voice-wave span:nth-child(3) { animation-delay: 0.4s; height: 24px; }
+.voice-wave span:nth-child(4) { animation-delay: 0.1s; height: 14px; }
+.voice-wave span:nth-child(5) { animation-delay: 0.3s; height: 10px; }
+
+/* شاشة الانتظار */
+.waiting-card {
+    position: absolute;
+    inset: 20px;
+    background: rgba(18, 16, 38, 0.88);
+    backdrop-filter: blur(20px);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-glow);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 30px 20px;
+    z-index: 15;
+    transition: var(--transition);
+}
+
+.waiting-card.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.95);
+}
+
+.loader-spinner {
+    width: 60px;
+    height: 60px;
+    border: 4px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--primary-cyan);
+    border-right-color: var(--primary-purple);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
+}
+
+.waiting-card h2 {
+    font-size: 1.2rem;
+    margin-bottom: 10px;
+}
+
+.waiting-card p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    max-width: 300px;
+    margin-bottom: 24px;
+    line-height: 1.5;
+}
+
+.room-share-box {
+    width: 100%;
+    max-width: 320px;
+    display: flex;
+    gap: 8px;
+}
+
+.room-share-box input {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    color: #fff;
+    font-size: 0.85rem;
+    direction: ltr;
+    text-align: left;
+}
+
+.btn-secondary {
+    background: linear-gradient(135deg, var(--primary-purple), #7b2cbf);
+    border: none;
+    color: white;
+    padding: 10px 16px;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-secondary:active {
+    transform: scale(0.95);
+}
+
+/* نافذة الفيديو المحلي (صورتك) */
+.local-stream-container {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    width: 100px;
+    height: 140px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 2px solid var(--primary-cyan);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+    background: #000;
+    z-index: 25;
+    transition: var(--transition);
+}
+
+.local-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1); /* مرآة */
+}
+
+.local-placeholder {
+    display: none;
+    width: 100%;
+    height: 100%;
+    background: #191632;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    text-align: center;
+    padding: 10px;
+    justify-content: center;
+    align-items: center;
+}
+
+.local-stream-container.cam-off .local-placeholder {
+    display: flex;
+}
+
+.local-stream-container.cam-off .local-video {
+    display: none;
+}
+
+/* عداد المكالمة */
+.call-timer-container {
+    position: absolute;
+    top: 20px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 6px 16px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    z-index: 20;
+}
+
+.recording-icon {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--danger-red);
+    animation: blink 1s infinite alternate;
+}
+
+/* لوحة الأزرار والتحكم */
+.call-controls {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 16px 24px 24px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 30;
+}
+
+.control-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text-main);
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.control-btn .icon {
+    width: 24px;
+    height: 24px;
+}
+
+.control-btn .btn-label {
+    display: none;
+}
+
+.control-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    transform: translateY(-2px);
+}
+
+.control-btn:active {
+    transform: scale(0.92);
+}
+
+.control-btn.muted {
+    background: rgba(255, 51, 102, 0.2);
+    border-color: var(--danger-red);
+    color: var(--danger-red);
+}
+
+.control-btn.active {
+    background: rgba(0, 245, 212, 0.15);
+    border-color: var(--primary-cyan);
+    color: var(--primary-cyan);
+}
+
+.control-btn.btn-danger {
+    background: var(--danger-red);
+    border-color: transparent;
+    color: #fff;
+    width: 64px;
+    height: 64px;
+    box-shadow: 0 4px 18px rgba(255, 51, 102, 0.45);
+}
+
+.control-btn.btn-danger:hover {
+    background: #ff1953;
+    box-shadow: 0 6px 24px rgba(255, 51, 102, 0.6);
+}
+
+/* حركات الأنميشن */
+@keyframes ripple {
+    0% {
+        width: 140px;
+        height: 140px;
+        opacity: 0.8;
+    }
+    100% {
+        width: 240px;
+        height: 240px;
+        opacity: 0;
+    }
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes blink {
+    from { opacity: 0.3; }
+    to { opacity: 1; }
+}
+
+@keyframes wave {
+    0%, 100% { transform: scaleY(0.4); }
+    50% { transform: scaleY(1.4); }
+}
