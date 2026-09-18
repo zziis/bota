@@ -18,8 +18,8 @@ const userId = tgUser?.id || Math.floor(Math.random() * 100000);
 const statusBadge = document.getElementById('callStatusBadge');
 const statusText = document.getElementById('statusText');
 const waitingCard = document.getElementById('waitingCard');
-const roomLinkInput = document.getElementById('roomLinkInput');
 const copyLinkBtn = document.getElementById('copyLinkBtn');
+const shareLinkBtn = document.getElementById('shareLinkBtn');
 const remoteVideo = document.getElementById('remoteVideo');
 const remoteAvatarCard = document.getElementById('remoteAvatarCard');
 const remoteUserName = document.getElementById('remoteUserName');
@@ -31,13 +31,16 @@ const toggleCamBtn = document.getElementById('toggleCamBtn');
 const flipCamBtn = document.getElementById('flipCamBtn');
 const endCallBtn = document.getElementById('endCallBtn');
 
-// إعداد رابط الغرفة
-roomLinkInput.value = window.location.href;
-copyLinkBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(roomLinkInput.value).then(() => {
-        copyLinkBtn.innerText = 'تم النسخ!';
-        setTimeout(() => copyLinkBtn.innerText = 'نسخ الرابط', 2000);
-    });
+// رابط الغرفة يبقى مخفياً؛ نظهر فقط أزرار النسخ والمشاركة
+const roomShareUrl = window.location.href;
+copyLinkBtn.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(roomShareUrl); copyLinkBtn.innerText='✅ تم النسخ'; }
+    catch (_) { if (tg?.showAlert) tg.showAlert('تعذر النسخ تلقائياً'); }
+    setTimeout(() => copyLinkBtn.innerText='🔗 نسخ رابط المكالمة', 1800);
+});
+shareLinkBtn?.addEventListener('click', async () => {
+    if (navigator.share) { try { await navigator.share({title:'مكالمة خيال',url:roomShareUrl}); return; } catch (_) {} }
+    window.open('https://t.me/share/url?url='+encodeURIComponent(roomShareUrl)+'&text='+encodeURIComponent('دعوة مكالمة خيال'),'_blank');
 });
 
 // متغيرات WebRTC والوسائط
@@ -62,34 +65,16 @@ const rtcConfig = {
 // تشغيل الوسائط المحلية (الصوت أولاً)
 async function initLocalStream() {
     try {
-        localStream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-            video: {
-                width: { ideal: 640 },
-                height: { ideal: 480 },
-                facingMode: currentFacingMode
-            }
-        });
-        
+        // يبدأ الاتصال بالمايك فقط. لا نطلب إذن الكاميرا إلا عند ضغط المستخدم على زر الكاميرا.
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
         localVideo.srcObject = localStream;
-        
-        // تعطيل الكاميرا افتراضياً لتوفير البيانات والبدء بمكالمة صوتية سريعة
-        localStream.getVideoTracks().forEach(track => track.enabled = !isVideoMuted);
+        isVideoMuted = true;
         updateCamUI();
-        
-        setStatus('جاهز للاتصال', 'connected');
-    } catch (err) {
-        console.warn('تعذر فتح الكاميرا، المحاولة بالصوت فقط:', err);
-        try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-            isVideoMuted = true;
-            updateCamUI();
-            setStatus('جاهز صوتياً', 'connected');
-        } catch (audioErr) {
-            console.error('تعذر الوصول للمايكروفون:', audioErr);
-            setStatus('خطأ بالصلاحيات', 'danger');
-            alert('يرجى منح إذن استخدام الميكروفون للتمكن من إجراء المكالمة.');
-        }
+        setStatus('جاهز صوتياً', 'connected');
+    } catch (audioErr) {
+        console.error('تعذر الوصول للمايكروفون:', audioErr);
+        setStatus('خطأ بالصلاحيات', 'danger');
+        alert('يرجى منح إذن استخدام الميكروفون للتمكن من إجراء المكالمة.');
     }
 }
 

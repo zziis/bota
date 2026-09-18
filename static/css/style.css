@@ -489,3 +489,5 @@ body {
     0%, 100% { transform: scaleY(0.4); }
     50% { transform: scaleY(1.4); }
 }
+
+.compact-share{justify-content:center;flex-wrap:wrap}.compact-share .btn-secondary{flex:1;min-width:130px}.local-stream-container.cam-off{display:none}
