@@ -68,6 +68,106 @@ RADIO_STATIONS = [
 matchmaking_queue = [] # [ {"ws": ws, "userId": ..., "userName": ..., "bet": ...} ]
 active_game_rooms = {}  # room_id -> { "player1": ..., "player2": ..., "board": [...], "turn": ... }
 
+# اتصالات رومات خيال: دردشة + مايكات + مزامنة أغاني
+social_room_clients = {}  # room_id -> ws -> info
+social_room_seats = {}    # room_id -> seat -> {userId,userName}
+
+async def social_rooms_list_api(request):
+    items = await db.list_social_rooms()
+    for item in items:
+        item["online"] = len(social_room_clients.get(item["room_id"], {}))
+    return web.json_response({"rooms": items})
+
+async def social_room_create_api(request):
+    try:
+        data = await request.json()
+        uid = int(data.get("userId"))
+        name = str(data.get("name", "")).strip()[:40]
+        desc = str(data.get("description", "")).strip()[:250]
+        image = str(data.get("imageUrl", "")).strip()[:200000]
+        if len(name) < 2:
+            return web.json_response({"success": False, "message": "اكتب اسم الروم"}, status=400)
+        rid, points = await db.create_social_room(uid, name, image, desc, 300)
+        if not rid:
+            return web.json_response({"success": False, "message": "تحتاج 300 نقطة لإنشاء الروم", "points": points}, status=400)
+        return web.json_response({"success": True, "roomId": rid, "points": points})
+    except Exception as e:
+        return web.json_response({"success": False, "message": str(e)}, status=500)
+
+async def social_room_detail_api(request):
+    rid = request.match_info['room_id']
+    room = await db.get_social_room(rid)
+    if not room: raise web.HTTPNotFound()
+    room['messages'] = await db.get_room_messages(rid)
+    room['songs'] = await db.get_room_songs(rid)
+    room['online'] = len(social_room_clients.get(rid, {}))
+    room['seats'] = social_room_seats.get(rid, {})
+    return web.json_response(room)
+
+async def social_room_song_api(request):
+    rid = request.match_info['room_id']; data = await request.json()
+    ok = await db.add_room_song(rid, int(data.get('userId')), str(data.get('title','أغنية'))[:80], str(data.get('url',''))[:1000])
+    if not ok: return web.json_response({'success':False,'message':'إضافة الأغاني متاحة لمالك الروم'}, status=403)
+    return web.json_response({'success':True})
+
+async def social_room_ws(request):
+    rid = request.match_info['room_id']; ws = web.WebSocketResponse(heartbeat=25); await ws.prepare(request)
+    if not await db.get_social_room(rid):
+        await ws.close(); return ws
+    social_room_clients.setdefault(rid, {})
+    social_room_seats.setdefault(rid, {})
+    info = {'userId': None, 'userName': 'مستخدم'}
+    async def broadcast(payload, exclude=None):
+        for c in list(social_room_clients.get(rid, {})):
+            if c != exclude and not c.closed:
+                try: await c.send_json(payload)
+                except: pass
+    try:
+        async for msg in ws:
+            if msg.type != WSMsgType.TEXT: continue
+            try: data=json.loads(msg.data)
+            except: continue
+            typ=data.get('type')
+            if typ=='join':
+                info={'userId':int(data.get('userId')), 'userName':str(data.get('userName','مستخدم'))[:60]}
+                social_room_clients[rid][ws]=info
+                await ws.send_json({'type':'state','seats':social_room_seats[rid], 'peers':[v for c,v in social_room_clients[rid].items() if c!=ws]})
+                await broadcast({'type':'presence','online':len(social_room_clients[rid])})
+            elif typ=='chat' and info['userId']:
+                text=str(data.get('text','')).strip()[:1500]
+                if text:
+                    mid=await db.save_room_message(rid,info['userId'],info['userName'],text)
+                    await broadcast({'type':'chat','id':mid,'userId':info['userId'],'userName':info['userName'],'message':text}, None)
+            elif typ=='take-seat' and info['userId']:
+                seat=str(data.get('seat'))
+                # مستخدم واحد = مقعد واحد
+                for k,v in list(social_room_seats[rid].items()):
+                    if int(v['userId'])==info['userId']: del social_room_seats[rid][k]
+                if seat not in social_room_seats[rid] and seat in [str(i) for i in range(1,9)]:
+                    social_room_seats[rid][seat]=info.copy()
+                await broadcast({'type':'seats','seats':social_room_seats[rid]}, None)
+            elif typ=='leave-seat' and info['userId']:
+                for k,v in list(social_room_seats[rid].items()):
+                    if int(v['userId'])==info['userId']: del social_room_seats[rid][k]
+                await broadcast({'type':'seats','seats':social_room_seats[rid]}, None)
+            elif typ in ('offer','answer','candidate'):
+                target=int(data.get('target',0))
+                for c,ci in social_room_clients[rid].items():
+                    if ci.get('userId')==target and not c.closed:
+                        data['from']=info['userId']; data['fromName']=info['userName']; await c.send_json(data); break
+            elif typ=='song-play':
+                room=await db.get_social_room(rid)
+                if room and int(room['owner_id'])==info['userId']:
+                    await broadcast({'type':'song-play','url':str(data.get('url','')),'title':str(data.get('title',''))}, None)
+    finally:
+        social_room_clients.get(rid,{}).pop(ws,None)
+        if info['userId']:
+            for k,v in list(social_room_seats.get(rid,{}).items()):
+                if int(v['userId'])==info['userId']: del social_room_seats[rid][k]
+        await broadcast({'type':'seats','seats':social_room_seats.get(rid,{})}, None)
+        await broadcast({'type':'presence','online':len(social_room_clients.get(rid,{}))}, None)
+    return ws
+
 # ==================== WEBSOCKETS ====================
 
 async def websocket_call_handler(request):
@@ -375,10 +475,15 @@ def create_app():
     app.router.add_post("/api/points/request", request_points_api)
     app.router.add_post("/api/games/crash/settle", crash_settle_api)
     app.router.add_get("/api/radio/stations", get_radio_stations)
+    app.router.add_get("/api/rooms", social_rooms_list_api)
+    app.router.add_post("/api/rooms", social_room_create_api)
+    app.router.add_get("/api/rooms/{room_id}", social_room_detail_api)
+    app.router.add_post("/api/rooms/{room_id}/songs", social_room_song_api)
 
     # WebSockets
     app.router.add_get("/ws/call/{room_id}", websocket_call_handler)
     app.router.add_get("/ws/matchmaking", websocket_matchmaking_handler)
+    app.router.add_get("/ws/rooms/{room_id}", social_room_ws)
 
     # الملفات الثابتة
     app.router.add_static("/css", f"{STATIC_DIR}/css")

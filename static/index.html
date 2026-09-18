@@ -246,6 +246,30 @@
                 </div>
             </section>
 
+            <!-- ================= رومات خيال ================= -->
+            <section id="tab-rooms" class="tab-pane">
+                <div id="roomsDirectory">
+                    <div class="rooms-head"><div><h2>🎙️ رومات خيال</h2><p>مراسلة، مايكات وأغاني مباشرة</p></div><button class="room-plus" onclick="openCreateRoom()">＋</button></div>
+                    <div class="room-cost-note">إنشاء روم جديد: <b>300 نقطة</b></div>
+                    <div id="roomsList" class="rooms-list"></div>
+                </div>
+                <div id="createRoomPanel" class="room-panel hidden">
+                    <button class="room-back" onclick="closeCreateRoom()">→ رجوع</button><h2>إنشاء روم جديد</h2>
+                    <input id="newRoomName" class="room-input" maxlength="40" placeholder="اسم الروم">
+                    <label class="room-upload">📷 اختر صورة الروم<input id="newRoomImage" type="file" accept="image/*" hidden></label>
+                    <textarea id="newRoomDesc" class="room-input room-textarea" maxlength="250" placeholder="نبذة عن الروم"></textarea>
+                    <button class="btn-main-action" onclick="createSocialRoom()">إنشاء بـ 300 نقطة</button>
+                </div>
+                <div id="roomInside" class="room-panel hidden">
+                    <div class="room-inside-head"><button class="room-back" onclick="leaveSocialRoom()">→ خروج</button><div><h2 id="insideRoomName">الروم</h2><small id="insideOnline">0 متصل</small></div></div>
+                    <div id="micSeats" class="mic-seats"></div>
+                    <div class="room-mic-controls"><button id="roomMicToggle" onclick="toggleRoomMic()">🎙️ كتم</button><button onclick="leaveMySeat()">⬇️ نزول</button></div>
+                    <div class="room-song-box"><div class="room-section-title">🎵 أغاني الروم</div><div id="roomSongAdmin" class="hidden"><input id="songTitle" class="room-input" placeholder="اسم الأغنية"><input id="songUrl" class="room-input" placeholder="رابط مباشر MP3"><button class="btn-secondary" onclick="addRoomSong()">إضافة</button></div><div id="roomSongs"></div><audio id="roomAudio" controls></audio></div>
+                    <div class="room-section-title">💬 المراسلة</div><div id="roomMessages" class="room-messages"></div>
+                    <div class="room-chat-send"><input id="roomChatInput" placeholder="اكتب رسالة..."><button onclick="sendRoomChat()">إرسال</button></div>
+                </div>
+            </section>
+
             <!-- ================= 4. قسم المتجر وشراء النقاط ================= -->
             <section id="tab-shop" class="tab-pane">
                 <!-- كرت المحفظة الشخصية -->
@@ -379,6 +403,9 @@
             <button class="nav-item" data-tab="shop" onclick="switchTab('shop')">
                 <span class="nav-icon">💎</span>
                 <span class="nav-label">المتجر</span>
+            </button>
+            <button class="nav-item" data-tab="rooms" onclick="switchTab('rooms')">
+                <span class="nav-icon">🎙️</span><span class="nav-label">الرومات</span>
             </button>
             <button class="nav-item" data-tab="call" onclick="switchTab('call')">
                 <span class="nav-icon">📞</span>

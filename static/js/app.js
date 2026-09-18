@@ -932,3 +932,56 @@ document.getElementById('copyLinkBtn')?.addEventListener('click', () => {
         switchTab('crash'); // التبويب الافتراضي هو لعبة الطيارة
     }
 })();
+
+// ==================== رومات خيال ====================
+let socialRoomId=null, socialRoomWs=null, socialRoomData=null, roomLocalStream=null, roomMicMuted=false;
+const roomPeers = new Map();
+tabs.rooms = {title:'رومات خيال'};
+
+const _switchTab = switchTab;
+switchTab = function(tabId){ _switchTab(tabId); if(tabId==='rooms' && !socialRoomId) loadSocialRooms(); };
+
+async function loadSocialRooms(){
+  const box=document.getElementById('roomsList'); if(!box)return; box.innerHTML='<div class="loader-spinner"></div>';
+  try{ const r=await fetch('/api/rooms'); const d=await r.json(); box.innerHTML='';
+    if(!d.rooms.length) box.innerHTML='<div class="room-cost-note">لا توجد رومات بعد — كن أول من ينشئ روم.</div>';
+    d.rooms.forEach(x=>{ const el=document.createElement('div');el.className='room-card';
+      const img=x.image_url||'/images/avatar.jpg'; el.innerHTML=`<img src="${escapeAttr(img)}"><div class="room-card-info"><h3>${escapeHtml(x.name)}</h3><p>${escapeHtml(x.description||'بدون نبذة')}</p><small>● ${x.online||0} متصل</small></div><button class="btn-secondary">دخول</button>`;
+      el.querySelector('button').onclick=()=>enterSocialRoom(x.room_id);box.appendChild(el); });
+  }catch(e){box.innerHTML='<div class="room-cost-note">تعذر تحميل الرومات.</div>'}
+}
+function escapeHtml(v){const d=document.createElement('div');d.textContent=v??'';return d.innerHTML} function escapeAttr(v){return String(v||'').replace(/"/g,'&quot;')}
+function openCreateRoom(){document.getElementById('roomsDirectory').classList.add('hidden');document.getElementById('createRoomPanel').classList.remove('hidden')}
+function closeCreateRoom(){document.getElementById('createRoomPanel').classList.add('hidden');document.getElementById('roomsDirectory').classList.remove('hidden')}
+async function fileToDataUrl(file){return new Promise((ok,no)=>{if(!file)return ok('');const rd=new FileReader();rd.onload=()=>ok(rd.result);rd.onerror=no;rd.readAsDataURL(file)})}
+async function createSocialRoom(){
+ const name=document.getElementById('newRoomName').value.trim(), description=document.getElementById('newRoomDesc').value.trim();
+ if(name.length<2)return alert('اكتب اسم الروم'); if(userPoints<300)return alert('رصيدك غير كافٍ. إنشاء الروم يحتاج 300 نقطة.');
+ let imageUrl=''; const f=document.getElementById('newRoomImage').files[0]; if(f){if(f.size>900000)return alert('صورة الروم يجب أن تكون أقل من 900KB');imageUrl=await fileToDataUrl(f)}
+ const r=await fetch('/api/rooms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,userName,name,description,imageUrl})}); const d=await r.json();
+ if(!r.ok)return alert(d.message||'تعذر إنشاء الروم'); userPoints=d.points;updatePointsDisplay();closeCreateRoom();await enterSocialRoom(d.roomId);
+}
+async function enterSocialRoom(rid){
+ socialRoomId=rid; const r=await fetch(`/api/rooms/${encodeURIComponent(rid)}`); socialRoomData=await r.json();
+ document.getElementById('roomsDirectory').classList.add('hidden');document.getElementById('createRoomPanel').classList.add('hidden');document.getElementById('roomInside').classList.remove('hidden');
+ document.getElementById('insideRoomName').textContent=socialRoomData.name; document.getElementById('insideOnline').textContent=`${socialRoomData.online||0} متصل`;
+ document.getElementById('roomSongAdmin').classList.toggle('hidden',Number(socialRoomData.owner_id)!==Number(userId)); renderRoomMessages(socialRoomData.messages||[]);renderSeats(socialRoomData.seats||{});renderSongs(socialRoomData.songs||[]);
+ const proto=location.protocol==='https:'?'wss:':'ws:'; socialRoomWs=new WebSocket(`${proto}//${location.host}/ws/rooms/${encodeURIComponent(rid)}`);
+ socialRoomWs.onopen=()=>socialRoomWs.send(JSON.stringify({type:'join',userId,userName})); socialRoomWs.onmessage=handleRoomWs;
+}
+function handleRoomWs(ev){const d=JSON.parse(ev.data);if(d.type==='chat')appendRoomMessage(d);if(d.type==='seats')renderSeats(d.seats);if(d.type==='presence')document.getElementById('insideOnline').textContent=`${d.online} متصل`;if(d.type==='state'){renderSeats(d.seats);(d.peers||[]).forEach(p=>{if(Number(p.userId)!==Number(userId)) maybeConnectRoomPeer(p.userId,true)})}if(['offer','answer','candidate'].includes(d.type))handleRoomSignal(d);if(d.type==='song-play')playRoomSongLocal(d.url,d.title)}
+function renderRoomMessages(items){const b=document.getElementById('roomMessages');b.innerHTML='';items.forEach(appendRoomMessage)}
+function appendRoomMessage(m){const b=document.getElementById('roomMessages');const e=document.createElement('div');e.className='room-msg';e.innerHTML=`<b>${escapeHtml(m.userName||m.user_name)}</b>${escapeHtml(m.message)}`;b.appendChild(e);b.scrollTop=b.scrollHeight}
+function sendRoomChat(){const i=document.getElementById('roomChatInput'),t=i.value.trim();if(t&&socialRoomWs?.readyState===1){socialRoomWs.send(JSON.stringify({type:'chat',text:t}));i.value=''}}
+function renderSeats(seats){const b=document.getElementById('micSeats');b.innerHTML='';for(let n=1;n<=8;n++){const x=seats[String(n)],e=document.createElement('button');e.className='mic-seat'+(x?' taken':'');e.innerHTML=x?`<span class="mic-icon">🎙️</span><span>${escapeHtml(x.userName)}</span>`:`<span class="mic-icon">＋</span><span>مايك ${n}</span>`;e.onclick=()=>{if(!x)takeMicSeat(n)};b.appendChild(e)}}
+async function ensureRoomMic(){if(roomLocalStream)return roomLocalStream;try{roomLocalStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});return roomLocalStream}catch(e){alert('اسمح للمتصفح باستخدام المايك');throw e}}
+async function takeMicSeat(n){await ensureRoomMic();socialRoomWs?.send(JSON.stringify({type:'take-seat',seat:String(n)}));for(const [id] of roomPeers) maybeConnectRoomPeer(id,true)}
+function leaveMySeat(){socialRoomWs?.send(JSON.stringify({type:'leave-seat'}));if(roomLocalStream){roomLocalStream.getTracks().forEach(t=>t.stop());roomLocalStream=null}roomPeers.forEach(pc=>pc.close());roomPeers.clear()}
+function toggleRoomMic(){if(!roomLocalStream)return alert('اصعد على أحد المايكات أولاً');roomMicMuted=!roomMicMuted;roomLocalStream.getAudioTracks().forEach(t=>t.enabled=!roomMicMuted);document.getElementById('roomMicToggle').textContent=roomMicMuted?'🔇 فتح':'🎙️ كتم'}
+async function getRoomPc(peerId){if(roomPeers.has(peerId))return roomPeers.get(peerId);const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});roomPeers.set(peerId,pc);if(roomLocalStream)roomLocalStream.getTracks().forEach(t=>pc.addTrack(t,roomLocalStream));pc.onicecandidate=e=>{if(e.candidate)socialRoomWs?.send(JSON.stringify({type:'candidate',target:peerId,candidate:e.candidate}))};pc.ontrack=e=>{let a=document.getElementById(`room-audio-${peerId}`);if(!a){a=document.createElement('audio');a.id=`room-audio-${peerId}`;a.autoplay=true;a.playsInline=true;document.body.appendChild(a)}a.srcObject=e.streams[0];a.play().catch(()=>{})};return pc}
+async function maybeConnectRoomPeer(peerId,initiator){if(Number(peerId)===Number(userId)||!roomLocalStream)return;const pc=await getRoomPc(Number(peerId));if(initiator&&pc.signalingState==='stable'){const offer=await pc.createOffer();await pc.setLocalDescription(offer);socialRoomWs?.send(JSON.stringify({type:'offer',target:Number(peerId),sdp:offer}))}}
+async function handleRoomSignal(d){const from=Number(d.from);if(d.type==='offer'){await ensureRoomMic();const pc=await getRoomPc(from);await pc.setRemoteDescription(new RTCSessionDescription(d.sdp));const ans=await pc.createAnswer();await pc.setLocalDescription(ans);socialRoomWs.send(JSON.stringify({type:'answer',target:from,sdp:ans}))}else if(d.type==='answer'){const pc=await getRoomPc(from);await pc.setRemoteDescription(new RTCSessionDescription(d.sdp))}else if(d.type==='candidate'){const pc=await getRoomPc(from);try{await pc.addIceCandidate(new RTCIceCandidate(d.candidate))}catch(e){}}}
+async function addRoomSong(){const title=document.getElementById('songTitle').value.trim(),url=document.getElementById('songUrl').value.trim();if(!title||!url)return alert('اكتب اسم الأغنية والرابط المباشر');const r=await fetch(`/api/rooms/${encodeURIComponent(socialRoomId)}/songs`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,title,url})});const d=await r.json();if(!r.ok)return alert(d.message);socialRoomData=await (await fetch(`/api/rooms/${encodeURIComponent(socialRoomId)}`)).json();renderSongs(socialRoomData.songs)}
+function renderSongs(items){const b=document.getElementById('roomSongs');b.innerHTML='';items.forEach(x=>{const e=document.createElement('div');e.className='room-song-row';e.innerHTML=`<span>🎵 ${escapeHtml(x.title)}</span><button>تشغيل</button>`;e.querySelector('button').onclick=()=>{if(Number(socialRoomData.owner_id)!==Number(userId))return playRoomSongLocal(x.url,x.title);socialRoomWs?.send(JSON.stringify({type:'song-play',url:x.url,title:x.title}))};b.appendChild(e)})}
+function playRoomSongLocal(url,title){const a=document.getElementById('roomAudio');a.src=url;a.play().catch(()=>alert('تعذر تشغيل الرابط. استخدم رابط صوت مباشر HTTPS.'))}
+function leaveSocialRoom(){leaveMySeat();if(socialRoomWs){socialRoomWs.close();socialRoomWs=null}socialRoomId=null;socialRoomData=null;document.getElementById('roomInside').classList.add('hidden');document.getElementById('roomsDirectory').classList.remove('hidden');loadSocialRooms()}
