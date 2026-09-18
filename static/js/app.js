@@ -49,9 +49,6 @@ let isVideoMuted = true; // البدء صوتياً مع إمكانية تفعي
 let currentFacingMode = 'user';
 let timerInterval = null;
 let callStartTime = null;
-let videoSender = null;
-let remoteStream = new MediaStream();
-let pendingIceCandidates = [];
 
 // خوادم STUN العامة المجانية
 const rtcConfig = {
@@ -62,17 +59,37 @@ const rtcConfig = {
     ]
 };
 
-// تشغيل الوسائط المحلية: مايك فقط عند الدخول. الكاميرا لا تُطلب إلا عند ضغط زر الكاميرا.
+// تشغيل الوسائط المحلية (الصوت أولاً)
 async function initLocalStream() {
     try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        isVideoMuted = true;
+        localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                facingMode: currentFacingMode
+            }
+        });
+        
+        localVideo.srcObject = localStream;
+        
+        // تعطيل الكاميرا افتراضياً لتوفير البيانات والبدء بمكالمة صوتية سريعة
+        localStream.getVideoTracks().forEach(track => track.enabled = !isVideoMuted);
         updateCamUI();
-        setStatus('جاهز صوتياً', 'connected');
-    } catch (audioErr) {
-        console.error('تعذر الوصول للمايكروفون:', audioErr);
-        setStatus('خطأ بالصلاحيات', 'danger');
-        alert('يرجى منح إذن استخدام الميكروفون للتمكن من إجراء المكالمة.');
+        
+        setStatus('جاهز للاتصال', 'connected');
+    } catch (err) {
+        console.warn('تعذر فتح الكاميرا، المحاولة بالصوت فقط:', err);
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            isVideoMuted = true;
+            updateCamUI();
+            setStatus('جاهز صوتياً', 'connected');
+        } catch (audioErr) {
+            console.error('تعذر الوصول للمايكروفون:', audioErr);
+            setStatus('خطأ بالصلاحيات', 'danger');
+            alert('يرجى منح إذن استخدام الميكروفون للتمكن من إجراء المكالمة.');
+        }
     }
 }
 
@@ -120,7 +137,6 @@ function connectSignalingServer() {
                     remoteUserName.innerText = data.callerName;
                 }
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-                await flushPendingIceCandidates();
                 const answer = await peerConnection.createAnswer();
                 await peerConnection.setLocalDescription(answer);
                 ws.send(JSON.stringify({
@@ -133,21 +149,15 @@ function connectSignalingServer() {
             case 'answer':
                 // استلام الرد
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                await flushPendingIceCandidates();
                 break;
 
             case 'candidate':
                 // تبادل مرشحي ICE
                 if (peerConnection && data.candidate) {
-                    const candidate = new RTCIceCandidate(data.candidate);
-                    if (peerConnection.remoteDescription) {
-                        try {
-                            await peerConnection.addIceCandidate(candidate);
-                        } catch (e) {
-                            console.error('خطأ في إضافة مرشح ICE:', e);
-                        }
-                    } else {
-                        pendingIceCandidates.push(candidate);
+                    try {
+                        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                    } catch (e) {
+                        console.error('خطأ في إضافة مرشح ICE:', e);
                     }
                 }
                 break;
@@ -163,28 +173,21 @@ function connectSignalingServer() {
     };
 }
 
-async function flushPendingIceCandidates() {
-    if (!peerConnection || !peerConnection.remoteDescription) return;
-    const queued = pendingIceCandidates.splice(0);
-    for (const candidate of queued) {
-        try { await peerConnection.addIceCandidate(candidate); }
-        catch (e) { console.error('خطأ في ICE المؤجل:', e); }
-    }
-}
-
 // إنشاء وإعداد اتصال النظير (Peer Connection)
 function createPeerConnection() {
     if (peerConnection) return;
 
     peerConnection = new RTCPeerConnection(rtcConfig);
 
-    // نرسل الصوت من البداية. ونحجز مسار فيديو في SDP حتى يمكن تشغيل الكاميرا
-    // لاحقاً عبر replaceTrack بدون إنشاء اتصال جديد أو قطع الصوت.
+    // إضافة المسارات المحلية (Local Tracks)
     if (localStream) {
-        localStream.getAudioTracks().forEach(track => peerConnection.addTrack(track, localStream));
+        localStream.getAudioTracks().forEach(track => {
+            peerConnection.addTrack(track, localStream);
+        });
     }
+    // نحجز مسار فيديو من البداية. تشغيل الكاميرا لاحقاً يستخدم replaceTrack
+    // ولا ينشئ Offer جديداً ولا يقطع الصوت.
     const videoTransceiver = peerConnection.addTransceiver('video', { direction: 'sendrecv' });
-    videoSender = videoTransceiver.sender;
 
     // إرسال مرشحي ICE
     peerConnection.onicecandidate = (event) => {
@@ -197,33 +200,29 @@ function createPeerConnection() {
         }
     };
 
-    // استلام الصوت/الفيديو للطرف البعيد في Stream واحد ثابت
+    // استلام مسارات الطرف البعيد (Remote Stream)
     peerConnection.ontrack = (event) => {
-        console.log('تم استلام مسار الطرف البعيد:', event.track.kind);
+        console.log('تم استلام تدفق الطرف البعيد');
         waitingCard.classList.add('hidden');
-
-        if (!remoteStream.getTracks().some(t => t.id === event.track.id)) {
-            remoteStream.addTrack(event.track);
-        }
+        
+        const remoteStream = event.streams[0];
         remoteVideo.srcObject = remoteStream;
-        // بعض متصفحات الهاتف تحتاج play() صراحة بعد إسناد الـ stream.
-        remoteVideo.play().catch(() => {});
 
-        if (event.track.kind === 'video') {
-            const showVideo = () => {
-                remoteVideo.classList.remove('hidden');
-                remoteAvatarCard.style.display = 'none';
-            };
-            const hideVideo = () => {
-                remoteVideo.classList.add('hidden');
-                remoteAvatarCard.style.display = 'flex';
-            };
-            event.track.addEventListener('unmute', showVideo);
-            event.track.addEventListener('mute', hideVideo);
-            event.track.addEventListener('ended', hideVideo);
-            if (!event.track.muted && event.track.readyState === 'live') showVideo();
-            else hideVideo();
+        // فحص ما إذا كان هناك فيديو فعال من الطرف البعيد
+        const videoTrack = remoteStream.getVideoTracks()[0];
+        if (videoTrack && videoTrack.enabled) {
+            remoteVideo.classList.remove('hidden');
+            remoteAvatarCard.style.display = 'none';
         }
+
+        videoTrack?.addEventListener('mute', () => {
+            remoteVideo.classList.add('hidden');
+            remoteAvatarCard.style.display = 'flex';
+        });
+        videoTrack?.addEventListener('unmute', () => {
+            remoteVideo.classList.remove('hidden');
+            remoteAvatarCard.style.display = 'none';
+        });
     };
 
     // مراقبة حالة الاتصال
@@ -233,8 +232,10 @@ function createPeerConnection() {
             setStatus('المكالمة جارية 🟢', 'connected');
             waitingCard.classList.add('hidden');
             startTimer();
-        } else if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
-            handlePeerDisconnect();
+        } else if (peerConnection.connectionState === 'disconnected') {
+            setStatus('جاري استعادة الاتصال...', 'calling');
+        } else if (peerConnection.connectionState === 'failed') {
+            setStatus('تعذر الاتصال', 'danger');
         }
     };
 }
@@ -291,44 +292,44 @@ toggleMicBtn.addEventListener('click', () => {
 });
 
 toggleCamBtn.addEventListener('click', async () => {
-    if (!localStream) return;
-
-    // إغلاق الكاميرا: نوقف مسار الكاميرا فقط ونبقي اتصال WebRTC والصوت كما هما.
-    if (!isVideoMuted) {
-        const oldTrack = localStream.getVideoTracks()[0];
-        if (videoSender) await videoSender.replaceTrack(null);
-        if (oldTrack) {
-            oldTrack.stop();
-            localStream.removeTrack(oldTrack);
-        }
-        localVideo.srcObject = null;
-        isVideoMuted = true;
-        updateCamUI();
-        return;
-    }
-
-    // فتح الكاميرا لأول مرة/من جديد بدون addTrack، حتى لا تبدأ renegotiation تفصل المكالمة.
+    if (!localStream || !peerConnection) return;
+    toggleCamBtn.disabled = true;
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: currentFacingMode },
-            audio: false
-        });
-        const videoTrack = stream.getVideoTracks()[0];
-        localStream.addTrack(videoTrack);
-        localVideo.srcObject = localStream;
+        let videoTrack = localStream.getVideoTracks()[0];
+        const sender = peerConnection.getSenders().find(s =>
+            (s.track && s.track.kind === 'video') ||
+            (!s.track && peerConnection.getTransceivers().some(t => t.sender === s && t.receiver.track.kind === 'video'))
+        );
 
-        if (peerConnection && !videoSender) {
-            const transceiver = peerConnection.getTransceivers().find(t => t.receiver?.track?.kind === 'video');
-            videoSender = transceiver?.sender || null;
+        if (isVideoMuted) {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: currentFacingMode, width: { ideal: 640 }, height: { ideal: 480 } },
+                audio: false
+            });
+            videoTrack = stream.getVideoTracks()[0];
+            localStream.getVideoTracks().forEach(t => {
+                t.stop();
+                localStream.removeTrack(t);
+            });
+            localStream.addTrack(videoTrack);
+            localVideo.srcObject = localStream;
+            if (sender) await sender.replaceTrack(videoTrack);
+            isVideoMuted = false;
+        } else {
+            if (sender) await sender.replaceTrack(null);
+            if (videoTrack) {
+                videoTrack.stop();
+                localStream.removeTrack(videoTrack);
+            }
+            localVideo.srcObject = localStream;
+            isVideoMuted = true;
         }
-        if (videoSender) await videoSender.replaceTrack(videoTrack);
-
-        isVideoMuted = false;
         updateCamUI();
-        localVideo.play().catch(() => {});
     } catch (e) {
-        console.error('تعذر فتح الكاميرا:', e);
-        alert('تعذر فتح الكاميرا. تأكد من منح صلاحية الكاميرا.');
+        console.error('خطأ الكاميرا:', e);
+        alert('تعذر فتح الكاميرا. تحقق من إذن الكاميرا.');
+    } finally {
+        toggleCamBtn.disabled = false;
     }
 });
 
@@ -342,32 +343,23 @@ function updateCamUI() {
 }
 
 flipCamBtn.addEventListener('click', async () => {
-    if (isVideoMuted || !localStream) return;
+    if (isVideoMuted || !localStream || !peerConnection) return;
     currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
-    
-    const oldTrack = localStream.getVideoTracks()[0];
-    if (oldTrack) {
-        oldTrack.stop();
-        localStream.removeTrack(oldTrack);
-    }
-
     try {
         const newStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: currentFacingMode }
+            video: { facingMode: currentFacingMode },
+            audio: false
         });
         const newTrack = newStream.getVideoTracks()[0];
+        const oldTrack = localStream.getVideoTracks()[0];
+        const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (sender) await sender.replaceTrack(newTrack);
+        if (oldTrack) {
+            oldTrack.stop();
+            localStream.removeTrack(oldTrack);
+        }
         localStream.addTrack(newTrack);
         localVideo.srcObject = localStream;
-
-        if (peerConnection) {
-            const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-            if (sender) {
-                await sender.replaceTrack(newTrack);
-                videoSender = sender;
-            } else if (videoSender) {
-                await videoSender.replaceTrack(newTrack);
-            }
-        }
     } catch (e) {
         console.error('خطأ في تبديل الكاميرا:', e);
     }
