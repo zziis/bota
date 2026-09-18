@@ -1,6 +1,7 @@
 import os
 import uuid
 import logging
+from urllib.parse import quote
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
@@ -27,12 +28,18 @@ dp = Dispatcher()
 
 def make_miniapp_button(path: str, label: str, name: str = "") -> InlineKeyboardButton:
     """إنشاء زر Mini App متوافق مع HTTPS والرابط المحلي"""
-    safe_name = name.replace(" ", "%20")
-    full_url = f"{BASE_URL}{path}?name={safe_name}"
-    if BASE_URL.startswith("https://"):
+    safe_name = quote(name or "", safe="")
+    base = (BASE_URL or "").strip().rstrip("/")
+    # Telegram يقبل روابط أزرار URL العامة فقط بصيغة صحيحة.
+    # على Railway نستخدم RAILWAY_PUBLIC_DOMAIN تلقائياً من config.py.
+    if not base.startswith(("https://", "http://")):
+        base = "https://" + base.lstrip("/")
+    full_url = f"{base}{path}?name={safe_name}"
+    if base.startswith("https://"):
         return InlineKeyboardButton(text=label, web_app=WebAppInfo(url=full_url))
-    else:
-        return InlineKeyboardButton(text=label, url=full_url)
+    # هذا الفرع للتطوير المحلي فقط؛ لا ترسله Telegram كرابط localhost.
+    logger.warning("BASE_URL غير HTTPS (%s). اضبط BASE_URL على رابط Railway العام.", base)
+    return InlineKeyboardButton(text=label, callback_data="webapp_url_missing")
 
 # لوحة الأزرار الرئيسية الشاملة لجميع أقسام خيال
 def get_user_super_keyboard(name: str = "") -> InlineKeyboardMarkup:
@@ -71,6 +78,11 @@ def get_admin_message_keyboard(user_id: int) -> InlineKeyboardMarkup:
         ]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+@dp.callback_query(F.data == "webapp_url_missing")
+async def webapp_url_missing(callback: CallbackQuery):
+    await callback.answer("رابط التطبيق غير مضبوط. أضف BASE_URL كرابط Railway العام HTTPS.", show_alert=True)
 
 # =================== معالجات الأوامر ===================
 
