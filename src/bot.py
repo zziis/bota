@@ -45,6 +45,7 @@ def get_user_main_keyboard(room_id: str = None, name: str = "") -> InlineKeyboar
     buttons = [
         [InlineKeyboardButton(text="📞 الاتصال", callback_data="call_menu")],
         [InlineKeyboardButton(text="👥 الأصدقاء", callback_data="friends_menu"), InlineKeyboardButton(text="🎵 الأغاني والفيديو", callback_data="media_menu")],
+        [InlineKeyboardButton(text="🎮 الألعاب", web_app=WebAppInfo(url=f"{BASE_URL}/games"))],
         [InlineKeyboardButton(text="💬 حول خيال", callback_data="help_info"), InlineKeyboardButton(text="👤 حسابي", callback_data="my_account")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)

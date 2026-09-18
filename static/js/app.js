@@ -49,6 +49,8 @@ let isVideoMuted = true; // البدء صوتياً مع إمكانية تفعي
 let currentFacingMode = 'user';
 let timerInterval = null;
 let callStartTime = null;
+let pendingIceCandidates = [];
+let videoSender = null;
 
 // خوادم STUN العامة المجانية
 const rtcConfig = {
@@ -63,33 +65,18 @@ const rtcConfig = {
 async function initLocalStream() {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-            video: {
-                width: { ideal: 640 },
-                height: { ideal: 480 },
-                facingMode: currentFacingMode
-            }
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+            video: false
         });
-        
         localVideo.srcObject = localStream;
-        
-        // تعطيل الكاميرا افتراضياً لتوفير البيانات والبدء بمكالمة صوتية سريعة
-        localStream.getVideoTracks().forEach(track => track.enabled = !isVideoMuted);
+        isVideoMuted = true;
         updateCamUI();
-        
-        setStatus('جاهز للاتصال', 'connected');
-    } catch (err) {
-        console.warn('تعذر فتح الكاميرا، المحاولة بالصوت فقط:', err);
-        try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-            isVideoMuted = true;
-            updateCamUI();
-            setStatus('جاهز صوتياً', 'connected');
-        } catch (audioErr) {
-            console.error('تعذر الوصول للمايكروفون:', audioErr);
-            setStatus('خطأ بالصلاحيات', 'danger');
-            alert('يرجى منح إذن استخدام الميكروفون للتمكن من إجراء المكالمة.');
-        }
+        setStatus('جاهز صوتياً', 'connected');
+    } catch (audioErr) {
+        console.error('تعذر الوصول للمايكروفون:', audioErr);
+        setStatus('خطأ بالصلاحيات', 'danger');
+        alert('يرجى منح إذن استخدام الميكروفون للتمكن من إجراء المكالمة.');
+        throw audioErr;
     }
 }
 
@@ -137,6 +124,7 @@ function connectSignalingServer() {
                     remoteUserName.innerText = data.callerName;
                 }
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                await flushPendingIce();
                 const answer = await peerConnection.createAnswer();
                 await peerConnection.setLocalDescription(answer);
                 ws.send(JSON.stringify({
@@ -149,13 +137,19 @@ function connectSignalingServer() {
             case 'answer':
                 // استلام الرد
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                await flushPendingIce();
                 break;
 
             case 'candidate':
                 // تبادل مرشحي ICE
-                if (peerConnection && data.candidate) {
+                if (data.candidate) {
                     try {
-                        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                        const candidate = new RTCIceCandidate(data.candidate);
+                        if (peerConnection && peerConnection.remoteDescription) {
+                            await peerConnection.addIceCandidate(candidate);
+                        } else {
+                            pendingIceCandidates.push(candidate);
+                        }
                     } catch (e) {
                         console.error('خطأ في إضافة مرشح ICE:', e);
                     }
@@ -173,6 +167,14 @@ function connectSignalingServer() {
     };
 }
 
+async function flushPendingIce() {
+    if (!peerConnection || !peerConnection.remoteDescription) return;
+    const queued = pendingIceCandidates.splice(0);
+    for (const candidate of queued) {
+        try { await peerConnection.addIceCandidate(candidate); } catch (e) { console.warn('ICE queue:', e); }
+    }
+}
+
 // إنشاء وإعداد اتصال النظير (Peer Connection)
 function createPeerConnection() {
     if (peerConnection) return;
@@ -188,6 +190,7 @@ function createPeerConnection() {
     // نحجز مسار فيديو من البداية. تشغيل الكاميرا لاحقاً يستخدم replaceTrack
     // ولا ينشئ Offer جديداً ولا يقطع الصوت.
     const videoTransceiver = peerConnection.addTransceiver('video', { direction: 'sendrecv' });
+    videoSender = videoTransceiver.sender;
 
     // إرسال مرشحي ICE
     peerConnection.onicecandidate = (event) => {
@@ -207,6 +210,9 @@ function createPeerConnection() {
         
         const remoteStream = event.streams[0];
         remoteVideo.srcObject = remoteStream;
+        remoteVideo.muted = false;
+        remoteVideo.volume = 1;
+        remoteVideo.play().catch(() => {});
 
         // فحص ما إذا كان هناك فيديو فعال من الطرف البعيد
         const videoTrack = remoteStream.getVideoTracks()[0];
@@ -296,10 +302,7 @@ toggleCamBtn.addEventListener('click', async () => {
     toggleCamBtn.disabled = true;
     try {
         let videoTrack = localStream.getVideoTracks()[0];
-        const sender = peerConnection.getSenders().find(s =>
-            (s.track && s.track.kind === 'video') ||
-            (!s.track && peerConnection.getTransceivers().some(t => t.sender === s && t.receiver.track.kind === 'video'))
-        );
+        const sender = videoSender;
 
         if (isVideoMuted) {
             const stream = await navigator.mediaDevices.getUserMedia({
