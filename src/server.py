@@ -105,6 +105,5 @@ def create_app():
     app.router.add_get("/", index_handler)
     app.router.add_get("/call", index_handler)
     app.router.add_get("/call-ended.html", ended_handler)
-    app.router.add_get("/games", lambda request: web.FileResponse(f"{STATIC_DIR}/games.html"))
 
     return app
