@@ -28,8 +28,9 @@ dp = Dispatcher()
 
 def get_call_url(room_id: str, name: str = "") -> str:
     """توليد رابط المكالمة"""
-    safe_name = name.replace(" ", "%20")
-    return f"{BASE_URL}/call?room={room_id}&name={safe_name}"
+    # Encode the complete query string (including Arabic names) so Telegram receives a valid HTTPS URL.
+    query = urlencode({"room": room_id, "name": name})
+    return f"{BASE_URL}/call?{query}"
 
 def make_call_button(room_id: str, label: str = "📞 فتح مكالمة خيال المباشرة", name: str = "") -> InlineKeyboardButton:
     """إنشاء زر المكالمة كـ Mini App إذا كان الرابط يدعم HTTPS أو كرابط عادي"""
