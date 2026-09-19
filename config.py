@@ -18,12 +18,21 @@ SUPPORT_CHANNEL = os.getenv("SUPPORT_CHANNEL", "")
 # WebApp / Capsule URL
 # The WebApp capsule can be hosted locally via server.py or hosted online
 _public_base = os.getenv("BASE_URL", "").strip().rstrip("/")
+railway_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip().rstrip("/")
+if railway_domain and not railway_domain.startswith(("https://", "http://")):
+    railway_domain = "https://" + railway_domain
 if _public_base and not _public_base.startswith(("https://", "http://")):
     _public_base = "https://" + _public_base
-WEBAPP_URL = os.getenv("WEBAPP_URL", _public_base or "http://localhost:8080")
+# Railway: لا نسمح لـ localhost أن يتغلب على الدومين العام.
+if railway_domain and (not _public_base or "localhost" in _public_base or "127.0.0.1" in _public_base):
+    _public_base = railway_domain
+_webapp_override = os.getenv("WEBAPP_URL", "").strip().rstrip("/")
+if _webapp_override and not _webapp_override.startswith(("https://", "http://")):
+    _webapp_override = "https://" + _webapp_override
+WEBAPP_URL = _webapp_override or _public_base or "http://localhost:8080"
 
 # Database Path
-DB_PATH = BASE_DIR / "okar_database.sqlite"
+DB_PATH = BASE_DIR / "data" / "khayal.db"
 
 # Logo Path
 LOGO_PATH = BASE_DIR / "assets" / "okar_logo.jpg"

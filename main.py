@@ -11,8 +11,14 @@ import logging
 from aiohttp import web
 from src.config import BOT_TOKEN, ADMIN_IDS, PORT, HOST, BASE_URL, APP_NAME
 from src.db import init_db
+from database import init_db as init_legacy_features_db
+from handlers import common, group_guard, support, radio, random_chat, complaints, developer_zalzala
 from src.server import create_app
-from src.bot import bot, dp
+from src.bot import bot
+from aiogram import Dispatcher
+
+# Dispatcher نظيف: يمنع تعارض أزرار/أوامر النسخة القديمة داخل src/bot.py
+dp = Dispatcher()
 
 # إعداد السجلات (Logging)
 logging.basicConfig(
@@ -41,7 +47,14 @@ async def main():
     # 1. تهيئة قاعدة البيانات
     logger.info("جاري تهيئة قاعدة البيانات المحلية SQLite...")
     await init_db()
-    logger.info("قاعدة البيانات جاهزة بنجاح.")
+    await init_legacy_features_db()
+    logger.info("قاعدة البيانات الموحدة جاهزة بنجاح.")
+
+    # دمج خصائص أوكار القديمة داخل Dispatcher الرئيسي نفسه.
+    # بهذه الطريقة يوجد بوت واحد وPolling واحد فقط على Railway.
+    for router in (common.router, developer_zalzala.router, group_guard.router,
+                   support.router, radio.router, random_chat.router, complaints.router):
+        dp.include_router(router)
 
     # 2. تشغيل خادم الويب
     web_runner = await start_web_server()

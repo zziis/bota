@@ -1,17 +1,24 @@
-﻿import aiosqlite
+import aiosqlite
 from typing import Optional, Dict, List, Tuple
 from config import DB_PATH
 
 async def init_db():
+    # قاعدة موحدة مع نظام Mini App الرئيسي
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
         CREATE TABLE IF NOT EXISTS users (
             user_id INTEGER PRIMARY KEY,
             username TEXT,
             first_name TEXT,
+            full_name TEXT,
+            points INTEGER DEFAULT 500,
+            last_daily_claim TEXT DEFAULT '',
             gender TEXT DEFAULT 'unknown',
             is_banned INTEGER DEFAULT 0,
             ghost_mode INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)
@@ -91,6 +98,18 @@ async def init_db():
         )
         """)
         
+        # ترقيات توافقية: توحيد جدول users بين النظامين القديم والجديد
+        async with db.execute("PRAGMA table_info(users)") as cursor:
+            cols = {row[1] for row in await cursor.fetchall()}
+        migrations = {
+            "first_name": "TEXT", "full_name": "TEXT", "points": "INTEGER DEFAULT 500",
+            "last_daily_claim": "TEXT DEFAULT ''", "gender": "TEXT DEFAULT 'unknown'",
+            "ghost_mode": "INTEGER DEFAULT 0", "created_at": "TIMESTAMP",
+            "last_active": "TIMESTAMP", "joined_at": "TIMESTAMP"
+        }
+        for col, decl in migrations.items():
+            if col not in cols:
+                await db.execute(f"ALTER TABLE users ADD COLUMN {col} {decl}")
         await db.commit()
 
 # --- Users & Dev Superpowers ---
