@@ -212,6 +212,7 @@
                         </div>
 
                         <!-- أزرار المشغل -->
+                        <div class="fm-tuner"><button onclick="tuneRadio(-1)">◀</button><div id="fmFrequency" class="fm-frequency">87.5 FM</div><button onclick="tuneRadio(1)">▶</button></div>
                         <div class="player-controls">
                             <button id="radioPlayBtn" class="radio-btn-play" onclick="toggleRadioPlay()">
                                 <span id="playIcon">▶️</span>
@@ -256,7 +257,7 @@
                 <div id="createRoomPanel" class="room-panel hidden">
                     <button class="room-back" onclick="closeCreateRoom()">→ رجوع</button><h2>إنشاء روم جديد</h2>
                     <input id="newRoomName" class="room-input" maxlength="40" placeholder="اسم الروم">
-                    <label class="room-upload">📷 اختر صورة الروم<input id="newRoomImage" type="file" accept="image/*" hidden></label>
+                    <label class="room-upload">📷 اختر صورة الروم <span id="roomImagePicked"></span><input id="newRoomImage" type="file" accept="image/*" hidden onchange="document.getElementById('roomImagePicked').textContent=this.files[0]?'✓ تم الاختيار':''"></label>
                     <textarea id="newRoomDesc" class="room-input room-textarea" maxlength="250" placeholder="نبذة عن الروم"></textarea>
                     <button class="btn-main-action" onclick="createSocialRoom()">إنشاء بـ 300 نقطة</button>
                 </div>

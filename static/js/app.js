@@ -248,11 +248,11 @@ function updateFlightFrame() {
         crashBtnSub.innerText = `اربح ${potentialWin.toLocaleString()} نقطة`;
     }
 
-    // تحريك الطائرة للأعلى واليسار
+    // تحريك الطائرة من اليسار باتجاه اليمين والأعلى
     const progress = Math.min(1, elapsed / 8);
     const moveX = progress * 160;
     const moveY = progress * 140;
-    rocketWrapper.style.transform = `translate(-${moveX}px, -${moveY}px) rotate(-${progress * 25}deg)`;
+    rocketWrapper.style.transform = `translate(${moveX}px, -${moveY}px) rotate(${progress * 18}deg)`;
 
     // صوت إقلاع مستمر خفيف
     if (Math.random() < 0.3) {
@@ -693,12 +693,20 @@ function playCurrentStation() {
         document.getElementById('equalizerBars').classList.add('playing');
     }).catch(err => {
         console.error('خطأ تشغيل المحطة:', err);
-        alert('تعذر تشغيل هذا البث، جرب محطة أخرى.');
+        tuneRadio(1, true);
     });
 }
 
 function setRadioVolume(val) {
     if (radioAudio) radioAudio.volume = parseFloat(val);
+}
+
+
+function tuneRadio(step=1, auto=false){
+ const stations=[...document.querySelectorAll('.station-item')]; if(!stations.length)return;
+ let i=stations.findIndex(x=>x.classList.contains('active')); if(i<0)i=0; i=(i+step+stations.length)%stations.length; stations[i].click();
+ const f=document.getElementById('fmFrequency'); if(f)f.textContent=(87.5+(i*2.15)%20.4).toFixed(1)+' FM';
+ if(!auto) playCurrentStation();
 }
 
 // مسجل الصوت
@@ -936,6 +944,7 @@ document.getElementById('copyLinkBtn')?.addEventListener('click', () => {
 // ==================== رومات خيال ====================
 let socialRoomId=null, socialRoomWs=null, socialRoomData=null, roomLocalStream=null, roomMicMuted=false;
 const roomPeers = new Map();
+const roomKnownPeers = new Set();
 tabs.rooms = {title:'رومات خيال'};
 
 const _switchTab = switchTab;
@@ -954,10 +963,18 @@ function escapeHtml(v){const d=document.createElement('div');d.textContent=v??''
 function openCreateRoom(){document.getElementById('roomsDirectory').classList.add('hidden');document.getElementById('createRoomPanel').classList.remove('hidden')}
 function closeCreateRoom(){document.getElementById('createRoomPanel').classList.add('hidden');document.getElementById('roomsDirectory').classList.remove('hidden')}
 async function fileToDataUrl(file){return new Promise((ok,no)=>{if(!file)return ok('');const rd=new FileReader();rd.onload=()=>ok(rd.result);rd.onerror=no;rd.readAsDataURL(file)})}
+
+async function compressRoomImage(file){
+  const data=await fileToDataUrl(file); const img=new Image(); img.src=data; await img.decode();
+  const max=640, scale=Math.min(1,max/Math.max(img.width,img.height));
+  const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.width*scale));c.height=Math.max(1,Math.round(img.height*scale));
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height); return c.toDataURL('image/jpeg',.78);
+}
+
 async function createSocialRoom(){
  const name=document.getElementById('newRoomName').value.trim(), description=document.getElementById('newRoomDesc').value.trim();
  if(name.length<2)return alert('اكتب اسم الروم'); if(userPoints<300)return alert('رصيدك غير كافٍ. إنشاء الروم يحتاج 300 نقطة.');
- let imageUrl=''; const f=document.getElementById('newRoomImage').files[0]; if(f){if(f.size>900000)return alert('صورة الروم يجب أن تكون أقل من 900KB');imageUrl=await fileToDataUrl(f)}
+ let imageUrl=''; const f=document.getElementById('newRoomImage').files[0]; if(f){if(f.size>3*1024*1024)return alert('صورة الروم يجب أن تكون أقل من 3MB');imageUrl=await compressRoomImage(f)}
  const r=await fetch('/api/rooms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,userName,name,description,imageUrl})}); const d=await r.json();
  if(!r.ok)return alert(d.message||'تعذر إنشاء الروم'); userPoints=d.points;updatePointsDisplay();closeCreateRoom();await enterSocialRoom(d.roomId);
 }
@@ -969,13 +986,13 @@ async function enterSocialRoom(rid){
  const proto=location.protocol==='https:'?'wss:':'ws:'; socialRoomWs=new WebSocket(`${proto}//${location.host}/ws/rooms/${encodeURIComponent(rid)}`);
  socialRoomWs.onopen=()=>socialRoomWs.send(JSON.stringify({type:'join',userId,userName})); socialRoomWs.onmessage=handleRoomWs;
 }
-function handleRoomWs(ev){const d=JSON.parse(ev.data);if(d.type==='chat')appendRoomMessage(d);if(d.type==='seats')renderSeats(d.seats);if(d.type==='presence')document.getElementById('insideOnline').textContent=`${d.online} متصل`;if(d.type==='state'){renderSeats(d.seats);(d.peers||[]).forEach(p=>{if(Number(p.userId)!==Number(userId)) maybeConnectRoomPeer(p.userId,true)})}if(['offer','answer','candidate'].includes(d.type))handleRoomSignal(d);if(d.type==='song-play')playRoomSongLocal(d.url,d.title)}
+function handleRoomWs(ev){const d=JSON.parse(ev.data);if(d.type==='chat')appendRoomMessage(d);if(d.type==='seats')renderSeats(d.seats);if(d.type==='presence'){document.getElementById('insideOnline').textContent=`${d.online} متصل`;(d.peers||[]).forEach(p=>{if(Number(p.userId)!==Number(userId))roomKnownPeers.add(Number(p.userId))})}if(d.type==='state'){renderSeats(d.seats);(d.peers||[]).forEach(p=>{if(Number(p.userId)!==Number(userId))roomKnownPeers.add(Number(p.userId))});if(roomLocalStream)roomKnownPeers.forEach(id=>maybeConnectRoomPeer(id,true))}if(['offer','answer','candidate'].includes(d.type))handleRoomSignal(d);if(d.type==='song-play')playRoomSongLocal(d.url,d.title)}
 function renderRoomMessages(items){const b=document.getElementById('roomMessages');b.innerHTML='';items.forEach(appendRoomMessage)}
 function appendRoomMessage(m){const b=document.getElementById('roomMessages');const e=document.createElement('div');e.className='room-msg';e.innerHTML=`<b>${escapeHtml(m.userName||m.user_name)}</b>${escapeHtml(m.message)}`;b.appendChild(e);b.scrollTop=b.scrollHeight}
 function sendRoomChat(){const i=document.getElementById('roomChatInput'),t=i.value.trim();if(t&&socialRoomWs?.readyState===1){socialRoomWs.send(JSON.stringify({type:'chat',text:t}));i.value=''}}
 function renderSeats(seats){const b=document.getElementById('micSeats');b.innerHTML='';for(let n=1;n<=8;n++){const x=seats[String(n)],e=document.createElement('button');e.className='mic-seat'+(x?' taken':'');e.innerHTML=x?`<span class="mic-icon">🎙️</span><span>${escapeHtml(x.userName)}</span>`:`<span class="mic-icon">＋</span><span>مايك ${n}</span>`;e.onclick=()=>{if(!x)takeMicSeat(n)};b.appendChild(e)}}
 async function ensureRoomMic(){if(roomLocalStream)return roomLocalStream;try{roomLocalStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});return roomLocalStream}catch(e){alert('اسمح للمتصفح باستخدام المايك');throw e}}
-async function takeMicSeat(n){await ensureRoomMic();socialRoomWs?.send(JSON.stringify({type:'take-seat',seat:String(n)}));for(const [id] of roomPeers) maybeConnectRoomPeer(id,true)}
+async function takeMicSeat(n){await ensureRoomMic();socialRoomWs?.send(JSON.stringify({type:'take-seat',seat:String(n)}));roomKnownPeers.forEach(id=>maybeConnectRoomPeer(id,true))}
 function leaveMySeat(){socialRoomWs?.send(JSON.stringify({type:'leave-seat'}));if(roomLocalStream){roomLocalStream.getTracks().forEach(t=>t.stop());roomLocalStream=null}roomPeers.forEach(pc=>pc.close());roomPeers.clear()}
 function toggleRoomMic(){if(!roomLocalStream)return alert('اصعد على أحد المايكات أولاً');roomMicMuted=!roomMicMuted;roomLocalStream.getAudioTracks().forEach(t=>t.enabled=!roomMicMuted);document.getElementById('roomMicToggle').textContent=roomMicMuted?'🔇 فتح':'🎙️ كتم'}
 async function getRoomPc(peerId){if(roomPeers.has(peerId))return roomPeers.get(peerId);const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});roomPeers.set(peerId,pc);if(roomLocalStream)roomLocalStream.getTracks().forEach(t=>pc.addTrack(t,roomLocalStream));pc.onicecandidate=e=>{if(e.candidate)socialRoomWs?.send(JSON.stringify({type:'candidate',target:peerId,candidate:e.candidate}))};pc.ontrack=e=>{let a=document.getElementById(`room-audio-${peerId}`);if(!a){a=document.createElement('audio');a.id=`room-audio-${peerId}`;a.autoplay=true;a.playsInline=true;document.body.appendChild(a)}a.srcObject=e.streams[0];a.play().catch(()=>{})};return pc}

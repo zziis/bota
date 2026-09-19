@@ -84,7 +84,7 @@ async def social_room_create_api(request):
         uid = int(data.get("userId"))
         name = str(data.get("name", "")).strip()[:40]
         desc = str(data.get("description", "")).strip()[:250]
-        image = str(data.get("imageUrl", "")).strip()[:200000]
+        image = str(data.get("imageUrl", "")).strip()[:1500000]
         if len(name) < 2:
             return web.json_response({"success": False, "message": "اكتب اسم الروم"}, status=400)
         rid, points = await db.create_social_room(uid, name, image, desc, 300)
@@ -132,7 +132,7 @@ async def social_room_ws(request):
                 info={'userId':int(data.get('userId')), 'userName':str(data.get('userName','مستخدم'))[:60]}
                 social_room_clients[rid][ws]=info
                 await ws.send_json({'type':'state','seats':social_room_seats[rid], 'peers':[v for c,v in social_room_clients[rid].items() if c!=ws]})
-                await broadcast({'type':'presence','online':len(social_room_clients[rid])})
+                await broadcast({'type':'presence','online':len(social_room_clients[rid]),'peers':list(social_room_clients[rid].values())})
             elif typ=='chat' and info['userId']:
                 text=str(data.get('text','')).strip()[:1500]
                 if text:
