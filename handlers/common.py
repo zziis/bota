@@ -1,4 +1,4 @@
-﻿from aiogram import Router, F
+from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, WebAppInfo
 from aiogram.filters import CommandStart, Command
 from config import NEON_HEADER, NEON_FOOTER, LOGO_PATH, DEV_USERNAME, ADMIN_IDS, WEBAPP_URL
@@ -71,11 +71,14 @@ async def cmd_start(message: Message):
     )
 
     kb = get_main_keyboard(user.id)
+    # أرسل الشعار كرسالة مستقلة، ثم القائمة كنص مستقل.
+    # السبب: Telegram لا يسمح بـ edit_text على رسالة صورة، وكانت جميع أزرار
+    # callback تبدو وكأنها لا تعمل لأنها تحاول تعديل رسالة الصورة نفسها.
     if LOGO_PATH.exists():
         photo = FSInputFile(str(LOGO_PATH))
-        await message.answer_photo(photo=photo, caption=caption, reply_markup=kb, parse_mode="Markdown")
-    else:
-        await message.answer(caption, reply_markup=kb, parse_mode="Markdown")
+        await message.answer_photo(photo=photo)
+
+    await message.answer(caption, reply_markup=kb, parse_mode="Markdown")
 
 @router.callback_query(F.data == "main_menu")
 async def cb_main_menu(call: CallbackQuery):
