@@ -17,16 +17,7 @@ HOST = os.getenv("HOST", "0.0.0.0")
 
 # الرابط الأساسي للموقع (مهم لفتح Telegram Mini App للمكالمات)
 # مثال: https://khayal-bot.onrender.com أو رابط ngrok محلي
-_base_url = os.getenv("BASE_URL", "").strip()
-_railway_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
-if _base_url:
-    if not _base_url.startswith(("https://", "http://")):
-        _base_url = "https://" + _base_url
-    BASE_URL = _base_url.rstrip("/")
-elif _railway_domain:
-    BASE_URL = ("https://" + _railway_domain.lstrip("/")).rstrip("/")
-else:
-    BASE_URL = "http://localhost:8080"
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8080").rstrip("/")
 
 # اسم وهوية المشروع
 APP_NAME = "خيال | Khayal"

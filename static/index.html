@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/style.css?v=20260919-0321">
+    <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
     <div class="app-container">
@@ -204,7 +204,6 @@
                         <div class="station-meta">
                             <h2 id="currentStationName">إذاعة القرآن الكريم - القاهرة</h2>
                             <span class="genre-badge" id="currentStationGenre">بث حي مباشر 24/7</span>
-                            <span class="genre-badge" id="radioSignalState">📡 READY</span>
                         </div>
 
                         <!-- تموجات الصوت الترددية البصرية (Equalizer) -->
@@ -213,7 +212,6 @@
                         </div>
 
                         <!-- أزرار المشغل -->
-                        <div class="fm-tuner"><button onclick="tuneRadio(-1)">◀</button><div id="fmFrequency" class="fm-frequency">87.5 FM</div><button onclick="tuneRadio(1)">▶</button></div>
                         <div class="player-controls">
                             <button id="radioPlayBtn" class="radio-btn-play" onclick="toggleRadioPlay()">
                                 <span id="playIcon">▶️</span>
@@ -245,30 +243,6 @@
                     <div class="stations-list" id="stationsList">
                         <!-- تُحقن تلقائياً بالجافاسكربت -->
                     </div>
-                </div>
-            </section>
-
-            <!-- ================= رومات خيال ================= -->
-            <section id="tab-rooms" class="tab-pane">
-                <div id="roomsDirectory">
-                    <div class="rooms-head"><div><h2>🎙️ رومات خيال</h2><p>مراسلة، مايكات وأغاني مباشرة</p></div><button class="room-plus" onclick="openCreateRoom()">＋</button></div>
-                    <div class="room-cost-note">إنشاء روم جديد: <b>300 نقطة</b></div>
-                    <div id="roomsList" class="rooms-list"></div>
-                </div>
-                <div id="createRoomPanel" class="room-panel hidden">
-                    <button class="room-back" onclick="closeCreateRoom()">→ رجوع</button><h2>إنشاء روم جديد</h2>
-                    <input id="newRoomName" class="room-input" maxlength="40" placeholder="اسم الروم">
-                    <label class="room-upload">📷 اختر صورة الروم <span id="roomImagePicked"></span><input id="newRoomImage" type="file" accept="image/*" hidden onchange="document.getElementById('roomImagePicked').textContent=this.files[0]?'✓ تم الاختيار':''"></label>
-                    <textarea id="newRoomDesc" class="room-input room-textarea" maxlength="250" placeholder="نبذة عن الروم"></textarea>
-                    <button class="btn-main-action" onclick="createSocialRoom()">إنشاء بـ 300 نقطة</button>
-                </div>
-                <div id="roomInside" class="room-panel hidden">
-                    <div class="room-inside-head"><button class="room-back" onclick="leaveSocialRoom()">→ خروج</button><div><h2 id="insideRoomName">الروم</h2><small id="insideOnline">0 متصل</small></div></div>
-                    <div id="micSeats" class="mic-seats"></div>
-                    <div class="room-mic-controls"><button id="roomMicToggle" onclick="toggleRoomMic()">🎙️ كتم</button><button onclick="leaveMySeat()">⬇️ نزول</button></div>
-                    <div class="room-song-box"><div class="room-section-title">🎵 أغاني الروم</div><div id="roomSongAdmin" class="hidden"><input id="songTitle" class="room-input" placeholder="اسم الأغنية"><input id="songUrl" class="room-input" placeholder="رابط مباشر MP3"><button class="btn-secondary" onclick="addRoomSong()">إضافة</button></div><div id="roomSongs"></div><audio id="roomAudio" controls></audio></div>
-                    <div class="room-section-title">💬 المراسلة</div><div id="roomMessages" class="room-messages"></div>
-                    <div class="room-chat-send"><input id="roomChatInput" placeholder="اكتب رسالة..."><button onclick="sendRoomChat()">إرسال</button></div>
                 </div>
             </section>
 
@@ -406,9 +380,6 @@
                 <span class="nav-icon">💎</span>
                 <span class="nav-label">المتجر</span>
             </button>
-            <button class="nav-item" data-tab="rooms" onclick="switchTab('rooms')">
-                <span class="nav-icon">🎙️</span><span class="nav-label">الرومات</span>
-            </button>
             <button class="nav-item" data-tab="call" onclick="switchTab('call')">
                 <span class="nav-icon">📞</span>
                 <span class="nav-label">المكالمات</span>
@@ -419,6 +390,6 @@
     <!-- عنصر الصوت للراديو -->
     <audio id="globalRadioAudio" preload="none"></audio>
 
-    <script src="/js/app.js?v=20260919-0321"></script>
+    <script src="/js/app.js"></script>
 </body>
 </html>

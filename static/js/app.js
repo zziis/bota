@@ -248,11 +248,11 @@ function updateFlightFrame() {
         crashBtnSub.innerText = `اربح ${potentialWin.toLocaleString()} نقطة`;
     }
 
-    // تحريك الطائرة من اليسار باتجاه اليمين والأعلى
+    // تحريك الطائرة للأعلى واليسار
     const progress = Math.min(1, elapsed / 8);
     const moveX = progress * 160;
     const moveY = progress * 140;
-    rocketWrapper.style.transform = `translate(${moveX}px, -${moveY}px) rotate(${progress * 18}deg)`;
+    rocketWrapper.style.transform = `translate(-${moveX}px, -${moveY}px) rotate(-${progress * 25}deg)`;
 
     // صوت إقلاع مستمر خفيف
     if (Math.random() < 0.3) {
@@ -622,26 +622,84 @@ function repositionReflexTarget() {
     target.style.top = `${Math.floor(Math.random() * maxY)}px`;
 }
 
-// ==================== 6. راديو السيارة FM ====================
+// ==================== 6. قسم راديو خيال FM ومسجل الصوت ====================
 let radioAudio = document.getElementById('globalRadioAudio');
-let isRadioPlaying = false, currentStation = null, mediaRecorder = null, recordedChunks = [], recordInterval = null;
-let radioStations = [], currentStationIndex = 0, signalTimer = null, staticNoise = null;
-function signalState(text){const e=document.getElementById('radioSignalState');if(e)e.textContent=text;}
-function stopStaticNoise(){try{staticNoise?.stop()}catch(e){} staticNoise=null;}
-function startStaticNoise(){
- stopStaticNoise(); try{const ctx=getAudioContext(), len=ctx.sampleRate*1.5, b=ctx.createBuffer(1,len,ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*0.10;const n=ctx.createBufferSource(),g=ctx.createGain();n.buffer=b;n.loop=true;g.gain.value=.14;n.connect(g);g.connect(ctx.destination);n.start();staticNoise=n;}catch(e){}
+let isRadioPlaying = false;
+let currentStation = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordInterval = null;
+
+async function loadRadioStations() {
+    try {
+        const res = await fetch('/api/radio/stations');
+        const data = await res.json();
+        const list = document.getElementById('stationsList');
+        if (!list) return;
+
+        list.innerHTML = '';
+        data.stations.forEach((st, idx) => {
+            const item = document.createElement('div');
+            item.className = `station-item ${idx === 0 ? 'active' : ''}`;
+            item.innerHTML = `
+                <span class="st-icon">${st.icon}</span>
+                <div class="st-info">
+                    <h4>${st.name}</h4>
+                    <span>${st.genre}</span>
+                </div>
+            `;
+            item.onclick = () => selectStation(st, item);
+            list.appendChild(item);
+
+            if (idx === 0) currentStation = st;
+        });
+    } catch (e) {
+        console.error('خطأ تحميل الإذاعات:', e);
+    }
 }
-async function loadRadioStations(){
- try{const res=await fetch('/api/radio/stations',{cache:'no-store'});const data=await res.json();radioStations=data.stations||[];const list=document.getElementById('stationsList');if(!list)return;list.innerHTML='';radioStations.forEach((st,idx)=>{const item=document.createElement('div');item.className=`station-item ${idx===0?'active':''}`;item.dataset.index=idx;item.innerHTML=`<span class="st-icon">${st.icon}</span><div class="st-info"><h4>${st.name}</h4><span>${st.genre}</span></div><b>FM</b>`;item.onclick=()=>selectStation(st,item,idx);list.appendChild(item)});if(radioStations[0])selectStation(radioStations[0],list.firstElementChild,0,false)}catch(e){signalState('📡 NO SIGNAL');startStaticNoise()}
+
+function selectStation(station, element) {
+    currentStation = station;
+    document.querySelectorAll('.station-item').forEach(el => el.classList.remove('active'));
+    if (element) element.classList.add('active');
+
+    document.getElementById('currentStationIcon').innerText = station.icon;
+    document.getElementById('currentStationName').innerText = station.name;
+    document.getElementById('currentStationGenre').innerText = station.genre;
+
+    if (isRadioPlaying) {
+        playCurrentStation();
+    }
 }
-function selectStation(station,element,idx=0,autoplay=true){currentStation=station;currentStationIndex=idx;document.querySelectorAll('.station-item').forEach(el=>el.classList.remove('active'));element?.classList.add('active');document.getElementById('currentStationIcon').innerText=station.icon;document.getElementById('currentStationName').innerText=station.name;document.getElementById('currentStationGenre').innerText=station.genre;const f=document.getElementById('fmFrequency');if(f)f.textContent=(87.5+(idx*2.15)%20.4).toFixed(1)+' FM';signalState('📡 READY');if(autoplay||isRadioPlaying)playCurrentStation()}
-function toggleRadioPlay(){if(!currentStation)return;if(isRadioPlaying){radioAudio.pause();isRadioPlaying=false;stopStaticNoise();signalState('⏸ PAUSED');document.getElementById('playIcon').innerText='▶️';document.getElementById('equalizerBars').classList.remove('playing')}else playCurrentStation()}
-function playCurrentStation(){if(!currentStation)return;clearTimeout(signalTimer);stopStaticNoise();radioAudio.pause();radioAudio.src=currentStation.url;radioAudio.load();signalState('📡 TUNING...');signalTimer=setTimeout(()=>{if(!isRadioPlaying){signalState('📡 NO SIGNAL');startStaticNoise()}},9000);radioAudio.play().then(()=>{}).catch(()=>{clearTimeout(signalTimer);isRadioPlaying=false;signalState('📡 NO SIGNAL');startStaticNoise();document.getElementById('playIcon').innerText='▶️'})}
-radioAudio?.addEventListener('playing',()=>{clearTimeout(signalTimer);stopStaticNoise();isRadioPlaying=true;signalState('🟢 LIVE');document.getElementById('playIcon').innerText='⏸️';document.getElementById('equalizerBars').classList.add('playing')});
-radioAudio?.addEventListener('error',()=>{clearTimeout(signalTimer);isRadioPlaying=false;signalState('📡 NO SIGNAL');startStaticNoise();document.getElementById('playIcon').innerText='▶️';document.getElementById('equalizerBars').classList.remove('playing')});
-radioAudio?.addEventListener('stalled',()=>signalState('📡 WEAK SIGNAL...'));
-function setRadioVolume(val){if(radioAudio)radioAudio.volume=parseFloat(val)}
-function tuneRadio(step=1){if(!radioStations.length)return;currentStationIndex=(currentStationIndex+step+radioStations.length)%radioStations.length;const el=document.querySelector(`.station-item[data-index="${currentStationIndex}"]`);selectStation(radioStations[currentStationIndex],el,currentStationIndex,true);el?.scrollIntoView({behavior:'smooth',block:'nearest'})}
+
+function toggleRadioPlay() {
+    if (!currentStation) return;
+
+    if (isRadioPlaying) {
+        radioAudio.pause();
+        isRadioPlaying = false;
+        document.getElementById('playIcon').innerText = '▶️';
+        document.getElementById('equalizerBars').classList.remove('playing');
+    } else {
+        playCurrentStation();
+    }
+}
+
+function playCurrentStation() {
+    radioAudio.src = currentStation.url;
+    radioAudio.play().then(() => {
+        isRadioPlaying = true;
+        document.getElementById('playIcon').innerText = '⏸️';
+        document.getElementById('equalizerBars').classList.add('playing');
+    }).catch(err => {
+        console.error('خطأ تشغيل المحطة:', err);
+        alert('تعذر تشغيل هذا البث، جرب محطة أخرى.');
+    });
+}
+
+function setRadioVolume(val) {
+    if (radioAudio) radioAudio.volume = parseFloat(val);
+}
 
 // مسجل الصوت
 async function toggleRecording() {
@@ -742,121 +800,122 @@ let peerConnection = null;
 let callWs = null;
 let isAudioMuted = false;
 let isVideoMuted = true;
-let currentFacingMode = 'user';
-let pendingIceCandidates = [];
 const roomId = urlParams.get('room') || 'khayal-room';
 
-const rtcConfig = { iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun.cloudflare.com:3478' }
-]};
+const rtcConfig = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+};
 
 async function initCallMedia() {
-    if (localStream) return;
     try {
-        // نبدأ بالصوت فقط. الكاميرا تُضاف عند طلب المستخدم حتى لا تفشل المكالمة على بعض أجهزة Telegram.
-        localStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
-        isAudioMuted = false;
-        document.getElementById('toggleMicBtn')?.classList.add('active');
+        localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
+        });
+        document.getElementById('localVideo').srcObject = localStream;
+        localStream.getVideoTracks().forEach(t => t.enabled = false);
         connectCallSignaling();
-    } catch (e) {
-        console.error('تعذر الوصول للميكروفون', e);
-        alert('يرجى السماح لخيال باستخدام الميكروفون من صلاحيات Telegram/المتصفح.');
+    } catch (err) {
+        console.warn('تعذر فتح الكاميرا، المحاولة بالصوت:', err);
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            connectCallSignaling();
+        } catch (e) {
+            console.error('تعذر الوصول للميكروفون');
+        }
     }
 }
 
 function connectCallSignaling() {
-    if (callWs && [WebSocket.OPEN,WebSocket.CONNECTING].includes(callWs.readyState)) return;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     callWs = new WebSocket(`${protocol}//${window.location.host}/ws/call/${roomId}`);
-    callWs.onopen = () => callWs.send(JSON.stringify({type:'join',room:roomId,userId,userName}));
-    callWs.onmessage = async event => {
+
+    callWs.onopen = () => {
+        callWs.send(JSON.stringify({ type: 'join', room: roomId, userId, userName }));
+    };
+
+    callWs.onmessage = async (event) => {
         const data = JSON.parse(event.data);
-        try {
-            if (data.type === 'peer-joined') {
-                document.getElementById('remoteUserName').innerText = data.userName || 'الطرف الآخر';
-                await createCallPeerConnection();
-                await sendCallOffer();
-            } else if (data.type === 'offer') {
-                await createCallPeerConnection();
-                if (data.callerName) document.getElementById('remoteUserName').innerText = data.callerName;
-                await peerConnection.setRemoteDescription(data.offer);
-                await flushCallIce();
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-                callWs.send(JSON.stringify({type:'answer',room:roomId,answer:peerConnection.localDescription}));
-            } else if (data.type === 'answer' && peerConnection) {
-                await peerConnection.setRemoteDescription(data.answer);
-                await flushCallIce();
-            } else if (data.type === 'candidate') {
-                if (peerConnection?.remoteDescription) await peerConnection.addIceCandidate(data.candidate);
-                else pendingIceCandidates.push(data.candidate);
-            } else if (data.type === 'peer-left') {
-                document.getElementById('waitingCard').classList.remove('hidden');
-                document.getElementById('remoteVideo').classList.add('hidden');
-                peerConnection?.close(); peerConnection=null;
-            }
-        } catch(e){ console.error('WebRTC signal error',e); }
-    };
-}
-async function flushCallIce(){while(pendingIceCandidates.length&&peerConnection?.remoteDescription){try{await peerConnection.addIceCandidate(pendingIceCandidates.shift())}catch(e){}}}
-async function createCallPeerConnection() {
-    if (peerConnection && peerConnection.connectionState !== 'closed') return peerConnection;
-    peerConnection = new RTCPeerConnection(rtcConfig);
-    if (localStream) localStream.getTracks().forEach(t=>peerConnection.addTrack(t,localStream));
-    peerConnection.onicecandidate=e=>{if(e.candidate&&callWs?.readyState===WebSocket.OPEN)callWs.send(JSON.stringify({type:'candidate',room:roomId,candidate:e.candidate}))};
-    peerConnection.ontrack=e=>{
-        document.getElementById('waitingCard').classList.add('hidden');
-        const rv=document.getElementById('remoteVideo');
-        if(rv.srcObject!==e.streams[0]) rv.srcObject=e.streams[0];
-        // الصوت يصل حتى إن لم تكن كاميرا الطرف الآخر مفتوحة
-        rv.classList.remove('hidden'); rv.play().catch(()=>{});
-        if(e.track.kind==='video') document.getElementById('remoteAvatarCard').style.display='none';
-    };
-    return peerConnection;
-}
-async function sendCallOffer(){
-    if(!peerConnection||peerConnection.signalingState!=='stable'||callWs?.readyState!==WebSocket.OPEN)return;
-    const offer=await peerConnection.createOffer(); await peerConnection.setLocalDescription(offer);
-    callWs.send(JSON.stringify({type:'offer',room:roomId,offer:peerConnection.localDescription,callerName:userName}));
-}
-
-document.getElementById('toggleMicBtn')?.addEventListener('click', async()=>{
-    if(!localStream) await initCallMedia();
-    const t=localStream?.getAudioTracks()[0]; if(!t)return;
-    isAudioMuted=!isAudioMuted;t.enabled=!isAudioMuted;
-    document.getElementById('toggleMicBtn').classList.toggle('active',!isAudioMuted);
-});
-
-async function setCameraEnabled(enable){
-    await initCallMedia();
-    if(enable){
-        let track=localStream.getVideoTracks()[0];
-        if(!track){
-            const cam=await navigator.mediaDevices.getUserMedia({video:{facingMode:currentFacingMode,width:{ideal:640},height:{ideal:480}}});
-            track=cam.getVideoTracks()[0]; localStream.addTrack(track);
-            if(peerConnection){const sender=peerConnection.getSenders().find(s=>s.track?.kind==='video');if(sender)await sender.replaceTrack(track);else{peerConnection.addTrack(track,localStream);await sendCallOffer();}}
+        if (data.type === 'peer-joined') {
+            createCallPeerConnection();
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            callWs.send(JSON.stringify({ type: 'offer', room: roomId, offer, callerName: userName }));
+        } else if (data.type === 'offer') {
+            createCallPeerConnection();
+            if (data.callerName) document.getElementById('remoteUserName').innerText = data.callerName;
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            callWs.send(JSON.stringify({ type: 'answer', room: roomId, answer }));
+        } else if (data.type === 'answer') {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+        } else if (data.type === 'candidate' && peerConnection) {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } else if (data.type === 'peer-left') {
+            document.getElementById('waitingCard').classList.remove('hidden');
         }
-        track.enabled=true; isVideoMuted=false;
-        document.getElementById('localVideo').srcObject=localStream;
-    }else{
-        const track=localStream?.getVideoTracks()[0];if(track)track.enabled=false;isVideoMuted=true;
-    }
-    document.getElementById('toggleCamBtn').classList.toggle('active',!isVideoMuted);
-    document.getElementById('localContainer').classList.toggle('cam-off',isVideoMuted);
+    };
 }
-document.getElementById('toggleCamBtn')?.addEventListener('click',()=>setCameraEnabled(isVideoMuted).catch(e=>{console.error(e);alert('تعذر تشغيل الكاميرا. تحقق من صلاحية الكاميرا.')}));
-document.getElementById('flipCamBtn')?.addEventListener('click',async()=>{
-    if(isVideoMuted)return;
-    currentFacingMode=currentFacingMode==='user'?'environment':'user';
-    const old=localStream.getVideoTracks()[0];
-    const cam=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:currentFacingMode}}});const nt=cam.getVideoTracks()[0];
-    const sender=peerConnection?.getSenders().find(s=>s.track?.kind==='video');if(sender)await sender.replaceTrack(nt);
-    if(old){localStream.removeTrack(old);old.stop()}localStream.addTrack(nt);document.getElementById('localVideo').srcObject=localStream;
+
+function createCallPeerConnection() {
+    if (peerConnection) return;
+    peerConnection = new RTCPeerConnection(rtcConfig);
+    if (localStream) {
+        localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+    }
+    peerConnection.onicecandidate = (e) => {
+        if (e.candidate && callWs && callWs.readyState === WebSocket.OPEN) {
+            callWs.send(JSON.stringify({ type: 'candidate', room: roomId, candidate: e.candidate }));
+        }
+    };
+    peerConnection.ontrack = (e) => {
+        document.getElementById('waitingCard').classList.add('hidden');
+        const rVideo = document.getElementById('remoteVideo');
+        rVideo.srcObject = e.streams[0];
+        rVideo.classList.remove('hidden');
+        document.getElementById('remoteAvatarCard').style.display = 'none';
+    };
+}
+
+// أزرار المكالمة
+document.getElementById('toggleMicBtn')?.addEventListener('click', () => {
+    if (!localStream) return;
+    const aTrack = localStream.getAudioTracks()[0];
+    if (aTrack) {
+        isAudioMuted = !isAudioMuted;
+        aTrack.enabled = !isAudioMuted;
+        document.getElementById('toggleMicBtn').classList.toggle('active', !isAudioMuted);
+    }
 });
-document.getElementById('endCallBtn')?.addEventListener('click',()=>{if(callWs?.readyState===WebSocket.OPEN)callWs.send(JSON.stringify({type:'leave',room:roomId}));localStream?.getTracks().forEach(t=>t.stop());peerConnection?.close();callWs?.close();if(tg)tg.close();else switchTab('crash')});
-document.getElementById('copyLinkBtn')?.addEventListener('click',()=>navigator.clipboard.writeText(window.location.href).then(()=>alert('تم نسخ الرابط!')));
+
+document.getElementById('toggleCamBtn')?.addEventListener('click', () => {
+    if (!localStream) return;
+    const vTrack = localStream.getVideoTracks()[0];
+    if (vTrack) {
+        isVideoMuted = !isVideoMuted;
+        vTrack.enabled = !isVideoMuted;
+        document.getElementById('toggleCamBtn').classList.toggle('active', !isVideoMuted);
+        document.getElementById('localContainer').classList.toggle('cam-off', isVideoMuted);
+    }
+});
+
+document.getElementById('endCallBtn')?.addEventListener('click', () => {
+    if (confirm('إنهاء المكالمة؟')) {
+        if (callWs) callWs.send(JSON.stringify({ type: 'leave', room: roomId }));
+        if (tg) tg.close();
+        else switchTab('crash');
+    }
+});
+
+// نسخ رابط المكالمة
+document.getElementById('copyLinkBtn')?.addEventListener('click', () => {
+    navigator.clipboard.writeText(window.location.href);
+    alert('تم نسخ الرابط!');
+});
 
 // ==================== بدء التطبيق ====================
 (async function init() {
@@ -873,65 +932,3 @@ document.getElementById('copyLinkBtn')?.addEventListener('click',()=>navigator.c
         switchTab('crash'); // التبويب الافتراضي هو لعبة الطيارة
     }
 })();
-
-// ==================== رومات خيال ====================
-let socialRoomId=null, socialRoomWs=null, socialRoomData=null, roomLocalStream=null, roomMicMuted=false;
-const roomPeers = new Map();
-const roomKnownPeers = new Set();
-tabs.rooms = {title:'رومات خيال'};
-
-const _switchTab = switchTab;
-switchTab = function(tabId){ _switchTab(tabId); if(tabId==='rooms' && !socialRoomId) loadSocialRooms(); };
-
-async function loadSocialRooms(){
-  const box=document.getElementById('roomsList'); if(!box)return; box.innerHTML='<div class="loader-spinner"></div>';
-  try{ const r=await fetch('/api/rooms'); const d=await r.json(); box.innerHTML='';
-    if(!d.rooms.length) box.innerHTML='<div class="room-cost-note">لا توجد رومات بعد — كن أول من ينشئ روم.</div>';
-    d.rooms.forEach(x=>{ const el=document.createElement('div');el.className='room-card';
-      const img=x.image_url||'/images/avatar.jpg'; el.innerHTML=`<img src="${escapeAttr(img)}"><div class="room-card-info"><h3>${escapeHtml(x.name)}</h3><p>${escapeHtml(x.description||'بدون نبذة')}</p><small>● ${x.online||0} متصل</small></div><button class="btn-secondary">دخول</button>`;
-      el.querySelector('button').onclick=()=>enterSocialRoom(x.room_id);box.appendChild(el); });
-  }catch(e){box.innerHTML='<div class="room-cost-note">تعذر تحميل الرومات.</div>'}
-}
-function escapeHtml(v){const d=document.createElement('div');d.textContent=v??'';return d.innerHTML} function escapeAttr(v){return String(v||'').replace(/"/g,'&quot;')}
-function openCreateRoom(){document.getElementById('roomsDirectory').classList.add('hidden');document.getElementById('createRoomPanel').classList.remove('hidden')}
-function closeCreateRoom(){document.getElementById('createRoomPanel').classList.add('hidden');document.getElementById('roomsDirectory').classList.remove('hidden')}
-async function fileToDataUrl(file){return new Promise((ok,no)=>{if(!file)return ok('');const rd=new FileReader();rd.onload=()=>ok(rd.result);rd.onerror=no;rd.readAsDataURL(file)})}
-
-async function compressRoomImage(file){
-  const data=await fileToDataUrl(file); const img=new Image(); img.src=data; await img.decode();
-  const max=640, scale=Math.min(1,max/Math.max(img.width,img.height));
-  const c=document.createElement('canvas');c.width=Math.max(1,Math.round(img.width*scale));c.height=Math.max(1,Math.round(img.height*scale));
-  c.getContext('2d').drawImage(img,0,0,c.width,c.height); return c.toDataURL('image/jpeg',.78);
-}
-
-async function createSocialRoom(){
- const name=document.getElementById('newRoomName').value.trim(), description=document.getElementById('newRoomDesc').value.trim();
- if(name.length<2)return alert('اكتب اسم الروم'); if(userPoints<300)return alert('رصيدك غير كافٍ. إنشاء الروم يحتاج 300 نقطة.');
- let imageUrl=''; const f=document.getElementById('newRoomImage').files[0]; if(f){if(f.size>3*1024*1024)return alert('صورة الروم يجب أن تكون أقل من 3MB');imageUrl=await compressRoomImage(f)}
- const r=await fetch('/api/rooms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,userName,name,description,imageUrl})}); const d=await r.json();
- if(!r.ok)return alert(d.message||'تعذر إنشاء الروم'); userPoints=d.points;updatePointsDisplay();closeCreateRoom();await enterSocialRoom(d.roomId);
-}
-async function enterSocialRoom(rid){
- socialRoomId=rid; const r=await fetch(`/api/rooms/${encodeURIComponent(rid)}`); socialRoomData=await r.json();
- document.getElementById('roomsDirectory').classList.add('hidden');document.getElementById('createRoomPanel').classList.add('hidden');document.getElementById('roomInside').classList.remove('hidden');
- document.getElementById('insideRoomName').textContent=socialRoomData.name; document.getElementById('insideOnline').textContent=`${socialRoomData.online||0} متصل`;
- document.getElementById('roomSongAdmin').classList.toggle('hidden',Number(socialRoomData.owner_id)!==Number(userId)); renderRoomMessages(socialRoomData.messages||[]);renderSeats(socialRoomData.seats||{});renderSongs(socialRoomData.songs||[]);
- const proto=location.protocol==='https:'?'wss:':'ws:'; socialRoomWs=new WebSocket(`${proto}//${location.host}/ws/rooms/${encodeURIComponent(rid)}`);
- socialRoomWs.onopen=()=>socialRoomWs.send(JSON.stringify({type:'join',userId,userName})); socialRoomWs.onmessage=handleRoomWs;
-}
-function handleRoomWs(ev){const d=JSON.parse(ev.data);if(d.type==='chat')appendRoomMessage(d);if(d.type==='seats')renderSeats(d.seats);if(d.type==='presence'){document.getElementById('insideOnline').textContent=`${d.online} متصل`;(d.peers||[]).forEach(p=>{if(Number(p.userId)!==Number(userId))roomKnownPeers.add(Number(p.userId))})}if(d.type==='state'){renderSeats(d.seats);(d.peers||[]).forEach(p=>{if(Number(p.userId)!==Number(userId))roomKnownPeers.add(Number(p.userId))});if(roomLocalStream)roomKnownPeers.forEach(id=>maybeConnectRoomPeer(id,true))}if(['offer','answer','candidate'].includes(d.type))handleRoomSignal(d);if(d.type==='song-play')playRoomSongLocal(d.url,d.title)}
-function renderRoomMessages(items){const b=document.getElementById('roomMessages');b.innerHTML='';items.forEach(appendRoomMessage)}
-function appendRoomMessage(m){const b=document.getElementById('roomMessages');const e=document.createElement('div');e.className='room-msg';e.innerHTML=`<b>${escapeHtml(m.userName||m.user_name)}</b>${escapeHtml(m.message)}`;b.appendChild(e);b.scrollTop=b.scrollHeight}
-function sendRoomChat(){const i=document.getElementById('roomChatInput'),t=i.value.trim();if(t&&socialRoomWs?.readyState===1){socialRoomWs.send(JSON.stringify({type:'chat',text:t}));i.value=''}}
-function renderSeats(seats){const b=document.getElementById('micSeats');b.innerHTML='';for(let n=1;n<=8;n++){const x=seats[String(n)],e=document.createElement('button');e.className='mic-seat'+(x?' taken':'');e.innerHTML=x?`<span class="mic-icon">🎙️</span><span>${escapeHtml(x.userName)}</span>`:`<span class="mic-icon">＋</span><span>مايك ${n}</span>`;e.onclick=()=>{if(!x)takeMicSeat(n)};b.appendChild(e)}}
-async function ensureRoomMic(){if(roomLocalStream)return roomLocalStream;try{roomLocalStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});return roomLocalStream}catch(e){alert('اسمح للمتصفح باستخدام المايك');throw e}}
-async function takeMicSeat(n){await ensureRoomMic();socialRoomWs?.send(JSON.stringify({type:'take-seat',seat:String(n)}));roomKnownPeers.forEach(id=>maybeConnectRoomPeer(id,true))}
-function leaveMySeat(){socialRoomWs?.send(JSON.stringify({type:'leave-seat'}));if(roomLocalStream){roomLocalStream.getTracks().forEach(t=>t.stop());roomLocalStream=null}roomPeers.forEach(pc=>pc.close());roomPeers.clear()}
-function toggleRoomMic(){if(!roomLocalStream)return alert('اصعد على أحد المايكات أولاً');roomMicMuted=!roomMicMuted;roomLocalStream.getAudioTracks().forEach(t=>t.enabled=!roomMicMuted);document.getElementById('roomMicToggle').textContent=roomMicMuted?'🔇 فتح':'🎙️ كتم'}
-async function getRoomPc(peerId){if(roomPeers.has(peerId))return roomPeers.get(peerId);const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});roomPeers.set(peerId,pc);if(roomLocalStream)roomLocalStream.getTracks().forEach(t=>pc.addTrack(t,roomLocalStream));pc.onicecandidate=e=>{if(e.candidate)socialRoomWs?.send(JSON.stringify({type:'candidate',target:peerId,candidate:e.candidate}))};pc.ontrack=e=>{let a=document.getElementById(`room-audio-${peerId}`);if(!a){a=document.createElement('audio');a.id=`room-audio-${peerId}`;a.autoplay=true;a.playsInline=true;document.body.appendChild(a)}a.srcObject=e.streams[0];a.play().catch(()=>{})};return pc}
-async function maybeConnectRoomPeer(peerId,initiator){if(Number(peerId)===Number(userId)||!roomLocalStream)return;const pc=await getRoomPc(Number(peerId));if(initiator&&pc.signalingState==='stable'){const offer=await pc.createOffer();await pc.setLocalDescription(offer);socialRoomWs?.send(JSON.stringify({type:'offer',target:Number(peerId),sdp:offer}))}}
-async function handleRoomSignal(d){const from=Number(d.from);if(d.type==='offer'){await ensureRoomMic();const pc=await getRoomPc(from);await pc.setRemoteDescription(new RTCSessionDescription(d.sdp));const ans=await pc.createAnswer();await pc.setLocalDescription(ans);socialRoomWs.send(JSON.stringify({type:'answer',target:from,sdp:ans}))}else if(d.type==='answer'){const pc=await getRoomPc(from);await pc.setRemoteDescription(new RTCSessionDescription(d.sdp))}else if(d.type==='candidate'){const pc=await getRoomPc(from);try{await pc.addIceCandidate(new RTCIceCandidate(d.candidate))}catch(e){}}}
-async function addRoomSong(){const title=document.getElementById('songTitle').value.trim(),url=document.getElementById('songUrl').value.trim();if(!title||!url)return alert('اكتب اسم الأغنية والرابط المباشر');const r=await fetch(`/api/rooms/${encodeURIComponent(socialRoomId)}/songs`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,title,url})});const d=await r.json();if(!r.ok)return alert(d.message);socialRoomData=await (await fetch(`/api/rooms/${encodeURIComponent(socialRoomId)}`)).json();renderSongs(socialRoomData.songs)}
-function renderSongs(items){const b=document.getElementById('roomSongs');b.innerHTML='';items.forEach(x=>{const e=document.createElement('div');e.className='room-song-row';e.innerHTML=`<span>🎵 ${escapeHtml(x.title)}</span><button>تشغيل</button>`;e.querySelector('button').onclick=()=>{if(Number(socialRoomData.owner_id)!==Number(userId))return playRoomSongLocal(x.url,x.title);socialRoomWs?.send(JSON.stringify({type:'song-play',url:x.url,title:x.title}))};b.appendChild(e)})}
-function playRoomSongLocal(url,title){const a=document.getElementById('roomAudio');a.src=url;a.play().catch(()=>alert('تعذر تشغيل الرابط. استخدم رابط صوت مباشر HTTPS.'))}
-function leaveSocialRoom(){leaveMySeat();if(socialRoomWs){socialRoomWs.close();socialRoomWs=null}socialRoomId=null;socialRoomData=null;document.getElementById('roomInside').classList.add('hidden');document.getElementById('roomsDirectory').classList.remove('hidden');loadSocialRooms()}

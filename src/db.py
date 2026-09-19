@@ -79,20 +79,6 @@ async def init_db():
             )
         """)
 
-        # جداول رومات خيال
-        await db.execute("""CREATE TABLE IF NOT EXISTS social_rooms (
-            room_id TEXT PRIMARY KEY, owner_id INTEGER NOT NULL, name TEXT NOT NULL,
-            image_url TEXT DEFAULT '', description TEXT DEFAULT '', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""")
-        await db.execute("""CREATE TABLE IF NOT EXISTS room_messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, room_id TEXT NOT NULL, user_id INTEGER NOT NULL,
-            user_name TEXT, message TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""")
-        await db.execute("""CREATE TABLE IF NOT EXISTS room_songs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, room_id TEXT NOT NULL, title TEXT NOT NULL,
-            url TEXT NOT NULL, added_by INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""")
-
         # جدول مباريات الألعاب المباشرة (Matchmaking)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS game_matches (
@@ -275,66 +261,3 @@ async def get_stats():
             "total_calls": total_calls,
             "total_points": total_points
         }
-
-# ==================== رومات خيال ====================
-async def create_social_room(owner_id: int, name: str, image_url: str = '', description: str = '', cost: int = 300):
-    """إنشاء روم دائم بعد خصم النقاط بصورة ذرية."""
-    async with aiosqlite.connect(DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        await conn.execute("INSERT OR IGNORE INTO users (user_id, points) VALUES (?, 500)", (owner_id,))
-        async with conn.execute("SELECT points FROM users WHERE user_id=?", (owner_id,)) as cur:
-            row = await cur.fetchone()
-        if not row or row['points'] < cost:
-            return None, (row['points'] if row else 0)
-        # uuid غير مستورد هنا، نستخدم timestamp + owner لضمان معرف بسيط
-        room_id = f"r{owner_id}_{int(datetime.now().timestamp()*1000)}"
-        await conn.execute("UPDATE users SET points=points-? WHERE user_id=?", (cost, owner_id))
-        await conn.execute("INSERT INTO transactions (user_id,amount,tx_type,description) VALUES (?,?,'room_create',?)",
-                           (owner_id, -cost, f"إنشاء روم {name}"))
-        await conn.execute("INSERT INTO social_rooms (room_id,owner_id,name,image_url,description) VALUES (?,?,?,?,?)",
-                           (room_id, owner_id, name, image_url, description))
-        await conn.commit()
-        async with conn.execute("SELECT points FROM users WHERE user_id=?", (owner_id,)) as cur:
-            points = (await cur.fetchone())[0]
-        return room_id, points
-
-async def list_social_rooms():
-    async with aiosqlite.connect(DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        async with conn.execute("SELECT * FROM social_rooms ORDER BY created_at DESC") as cur:
-            return [dict(x) for x in await cur.fetchall()]
-
-async def get_social_room(room_id: str):
-    async with aiosqlite.connect(DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        async with conn.execute("SELECT * FROM social_rooms WHERE room_id=?", (room_id,)) as cur:
-            row = await cur.fetchone()
-            return dict(row) if row else None
-
-async def save_room_message(room_id: str, user_id: int, user_name: str, text: str):
-    async with aiosqlite.connect(DB_PATH) as conn:
-        cur = await conn.execute("INSERT INTO room_messages(room_id,user_id,user_name,message) VALUES (?,?,?,?)",
-                                 (room_id,user_id,user_name,text[:1500]))
-        await conn.commit()
-        return cur.lastrowid
-
-async def get_room_messages(room_id: str, limit: int = 60):
-    async with aiosqlite.connect(DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        async with conn.execute("SELECT * FROM room_messages WHERE room_id=? ORDER BY id DESC LIMIT ?", (room_id,limit)) as cur:
-            rows = [dict(x) for x in await cur.fetchall()]
-            return list(reversed(rows))
-
-async def add_room_song(room_id: str, user_id: int, title: str, url: str):
-    room = await get_social_room(room_id)
-    if not room or int(room['owner_id']) != int(user_id): return False
-    async with aiosqlite.connect(DB_PATH) as conn:
-        await conn.execute("INSERT INTO room_songs(room_id,title,url,added_by) VALUES (?,?,?,?)", (room_id,title,url,user_id))
-        await conn.commit()
-    return True
-
-async def get_room_songs(room_id: str):
-    async with aiosqlite.connect(DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        async with conn.execute("SELECT * FROM room_songs WHERE room_id=? ORDER BY id DESC", (room_id,)) as cur:
-            return [dict(x) for x in await cur.fetchall()]
