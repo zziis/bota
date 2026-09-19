@@ -808,122 +808,121 @@ let peerConnection = null;
 let callWs = null;
 let isAudioMuted = false;
 let isVideoMuted = true;
+let currentFacingMode = 'user';
+let pendingIceCandidates = [];
 const roomId = urlParams.get('room') || 'khayal-room';
 
-const rtcConfig = {
-    iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-    ]
-};
+const rtcConfig = { iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' }
+]};
 
 async function initCallMedia() {
+    if (localStream) return;
     try {
-        localStream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-            video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' }
-        });
-        document.getElementById('localVideo').srcObject = localStream;
-        localStream.getVideoTracks().forEach(t => t.enabled = false);
+        // نبدأ بالصوت فقط. الكاميرا تُضاف عند طلب المستخدم حتى لا تفشل المكالمة على بعض أجهزة Telegram.
+        localStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+        isAudioMuted = false;
+        document.getElementById('toggleMicBtn')?.classList.add('active');
         connectCallSignaling();
-    } catch (err) {
-        console.warn('تعذر فتح الكاميرا، المحاولة بالصوت:', err);
-        try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            connectCallSignaling();
-        } catch (e) {
-            console.error('تعذر الوصول للميكروفون');
-        }
+    } catch (e) {
+        console.error('تعذر الوصول للميكروفون', e);
+        alert('يرجى السماح لخيال باستخدام الميكروفون من صلاحيات Telegram/المتصفح.');
     }
 }
 
 function connectCallSignaling() {
+    if (callWs && [WebSocket.OPEN,WebSocket.CONNECTING].includes(callWs.readyState)) return;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     callWs = new WebSocket(`${protocol}//${window.location.host}/ws/call/${roomId}`);
-
-    callWs.onopen = () => {
-        callWs.send(JSON.stringify({ type: 'join', room: roomId, userId, userName }));
-    };
-
-    callWs.onmessage = async (event) => {
+    callWs.onopen = () => callWs.send(JSON.stringify({type:'join',room:roomId,userId,userName}));
+    callWs.onmessage = async event => {
         const data = JSON.parse(event.data);
-        if (data.type === 'peer-joined') {
-            createCallPeerConnection();
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            callWs.send(JSON.stringify({ type: 'offer', room: roomId, offer, callerName: userName }));
-        } else if (data.type === 'offer') {
-            createCallPeerConnection();
-            if (data.callerName) document.getElementById('remoteUserName').innerText = data.callerName;
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-            callWs.send(JSON.stringify({ type: 'answer', room: roomId, answer }));
-        } else if (data.type === 'answer') {
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-        } else if (data.type === 'candidate' && peerConnection) {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } else if (data.type === 'peer-left') {
-            document.getElementById('waitingCard').classList.remove('hidden');
-        }
+        try {
+            if (data.type === 'peer-joined') {
+                document.getElementById('remoteUserName').innerText = data.userName || 'الطرف الآخر';
+                await createCallPeerConnection();
+                await sendCallOffer();
+            } else if (data.type === 'offer') {
+                await createCallPeerConnection();
+                if (data.callerName) document.getElementById('remoteUserName').innerText = data.callerName;
+                await peerConnection.setRemoteDescription(data.offer);
+                await flushCallIce();
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                callWs.send(JSON.stringify({type:'answer',room:roomId,answer:peerConnection.localDescription}));
+            } else if (data.type === 'answer' && peerConnection) {
+                await peerConnection.setRemoteDescription(data.answer);
+                await flushCallIce();
+            } else if (data.type === 'candidate') {
+                if (peerConnection?.remoteDescription) await peerConnection.addIceCandidate(data.candidate);
+                else pendingIceCandidates.push(data.candidate);
+            } else if (data.type === 'peer-left') {
+                document.getElementById('waitingCard').classList.remove('hidden');
+                document.getElementById('remoteVideo').classList.add('hidden');
+                peerConnection?.close(); peerConnection=null;
+            }
+        } catch(e){ console.error('WebRTC signal error',e); }
     };
 }
-
-function createCallPeerConnection() {
-    if (peerConnection) return;
+async function flushCallIce(){while(pendingIceCandidates.length&&peerConnection?.remoteDescription){try{await peerConnection.addIceCandidate(pendingIceCandidates.shift())}catch(e){}}}
+async function createCallPeerConnection() {
+    if (peerConnection && peerConnection.connectionState !== 'closed') return peerConnection;
     peerConnection = new RTCPeerConnection(rtcConfig);
-    if (localStream) {
-        localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
-    }
-    peerConnection.onicecandidate = (e) => {
-        if (e.candidate && callWs && callWs.readyState === WebSocket.OPEN) {
-            callWs.send(JSON.stringify({ type: 'candidate', room: roomId, candidate: e.candidate }));
-        }
-    };
-    peerConnection.ontrack = (e) => {
+    if (localStream) localStream.getTracks().forEach(t=>peerConnection.addTrack(t,localStream));
+    peerConnection.onicecandidate=e=>{if(e.candidate&&callWs?.readyState===WebSocket.OPEN)callWs.send(JSON.stringify({type:'candidate',room:roomId,candidate:e.candidate}))};
+    peerConnection.ontrack=e=>{
         document.getElementById('waitingCard').classList.add('hidden');
-        const rVideo = document.getElementById('remoteVideo');
-        rVideo.srcObject = e.streams[0];
-        rVideo.classList.remove('hidden');
-        document.getElementById('remoteAvatarCard').style.display = 'none';
+        const rv=document.getElementById('remoteVideo');
+        if(rv.srcObject!==e.streams[0]) rv.srcObject=e.streams[0];
+        // الصوت يصل حتى إن لم تكن كاميرا الطرف الآخر مفتوحة
+        rv.classList.remove('hidden'); rv.play().catch(()=>{});
+        if(e.track.kind==='video') document.getElementById('remoteAvatarCard').style.display='none';
     };
+    return peerConnection;
+}
+async function sendCallOffer(){
+    if(!peerConnection||peerConnection.signalingState!=='stable'||callWs?.readyState!==WebSocket.OPEN)return;
+    const offer=await peerConnection.createOffer(); await peerConnection.setLocalDescription(offer);
+    callWs.send(JSON.stringify({type:'offer',room:roomId,offer:peerConnection.localDescription,callerName:userName}));
 }
 
-// أزرار المكالمة
-document.getElementById('toggleMicBtn')?.addEventListener('click', () => {
-    if (!localStream) return;
-    const aTrack = localStream.getAudioTracks()[0];
-    if (aTrack) {
-        isAudioMuted = !isAudioMuted;
-        aTrack.enabled = !isAudioMuted;
-        document.getElementById('toggleMicBtn').classList.toggle('active', !isAudioMuted);
-    }
+document.getElementById('toggleMicBtn')?.addEventListener('click', async()=>{
+    if(!localStream) await initCallMedia();
+    const t=localStream?.getAudioTracks()[0]; if(!t)return;
+    isAudioMuted=!isAudioMuted;t.enabled=!isAudioMuted;
+    document.getElementById('toggleMicBtn').classList.toggle('active',!isAudioMuted);
 });
 
-document.getElementById('toggleCamBtn')?.addEventListener('click', () => {
-    if (!localStream) return;
-    const vTrack = localStream.getVideoTracks()[0];
-    if (vTrack) {
-        isVideoMuted = !isVideoMuted;
-        vTrack.enabled = !isVideoMuted;
-        document.getElementById('toggleCamBtn').classList.toggle('active', !isVideoMuted);
-        document.getElementById('localContainer').classList.toggle('cam-off', isVideoMuted);
+async function setCameraEnabled(enable){
+    await initCallMedia();
+    if(enable){
+        let track=localStream.getVideoTracks()[0];
+        if(!track){
+            const cam=await navigator.mediaDevices.getUserMedia({video:{facingMode:currentFacingMode,width:{ideal:640},height:{ideal:480}}});
+            track=cam.getVideoTracks()[0]; localStream.addTrack(track);
+            if(peerConnection){const sender=peerConnection.getSenders().find(s=>s.track?.kind==='video');if(sender)await sender.replaceTrack(track);else{peerConnection.addTrack(track,localStream);await sendCallOffer();}}
+        }
+        track.enabled=true; isVideoMuted=false;
+        document.getElementById('localVideo').srcObject=localStream;
+    }else{
+        const track=localStream?.getVideoTracks()[0];if(track)track.enabled=false;isVideoMuted=true;
     }
+    document.getElementById('toggleCamBtn').classList.toggle('active',!isVideoMuted);
+    document.getElementById('localContainer').classList.toggle('cam-off',isVideoMuted);
+}
+document.getElementById('toggleCamBtn')?.addEventListener('click',()=>setCameraEnabled(isVideoMuted).catch(e=>{console.error(e);alert('تعذر تشغيل الكاميرا. تحقق من صلاحية الكاميرا.')}));
+document.getElementById('flipCamBtn')?.addEventListener('click',async()=>{
+    if(isVideoMuted)return;
+    currentFacingMode=currentFacingMode==='user'?'environment':'user';
+    const old=localStream.getVideoTracks()[0];
+    const cam=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:currentFacingMode}}});const nt=cam.getVideoTracks()[0];
+    const sender=peerConnection?.getSenders().find(s=>s.track?.kind==='video');if(sender)await sender.replaceTrack(nt);
+    if(old){localStream.removeTrack(old);old.stop()}localStream.addTrack(nt);document.getElementById('localVideo').srcObject=localStream;
 });
-
-document.getElementById('endCallBtn')?.addEventListener('click', () => {
-    if (confirm('إنهاء المكالمة؟')) {
-        if (callWs) callWs.send(JSON.stringify({ type: 'leave', room: roomId }));
-        if (tg) tg.close();
-        else switchTab('crash');
-    }
-});
-
-// نسخ رابط المكالمة
-document.getElementById('copyLinkBtn')?.addEventListener('click', () => {
-    navigator.clipboard.writeText(window.location.href);
-    alert('تم نسخ الرابط!');
-});
+document.getElementById('endCallBtn')?.addEventListener('click',()=>{if(callWs?.readyState===WebSocket.OPEN)callWs.send(JSON.stringify({type:'leave',room:roomId}));localStream?.getTracks().forEach(t=>t.stop());peerConnection?.close();callWs?.close();if(tg)tg.close();else switchTab('crash')});
+document.getElementById('copyLinkBtn')?.addEventListener('click',()=>navigator.clipboard.writeText(window.location.href).then(()=>alert('تم نسخ الرابط!')));
 
 // ==================== بدء التطبيق ====================
 (async function init() {
