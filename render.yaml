@@ -1,13 +1,15 @@
 services:
   - type: web
-    name: khayal-bot
+    name: shabah-neon-platform
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
     envVars:
       - key: BOT_TOKEN
         sync: false
-      - key: ADMIN_IDS
+      - key: DEVELOPER_ID
         sync: false
-      - key: BASE_URL
+      - key: ADMIN_SECRET_KEY
+        sync: false
+      - key: WEBAPP_URL
         sync: false

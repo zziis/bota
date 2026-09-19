@@ -1,395 +1,122 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>خيال | Khayal Super-App</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Orbitron:wght@600;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>شبح | SHABAH NEON PLATFORM</title>
+  <!-- Telegram WebApp Script -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/static/css/neon.css">
+  <link rel="icon" type="image/svg+xml" href="/static/assets/skull.svg">
 </head>
 <body>
-    <div class="app-container">
-        <!-- شريط الرأس الموحد -->
-        <header class="app-header">
-            <div class="logo-box">
-                <img src="/images/avatar.jpg" alt="خيال" class="brand-avatar">
-                <div class="brand-info">
-                    <h1>خَيَال</h1>
-                    <span class="brand-tag" id="currentSectionTitle">منصة الترفيه والتواصل</span>
-                </div>
-            </div>
-            <!-- كرت رصيد النقاط مع زر الشحن السريع -->
-            <div class="points-badge" id="pointsHeaderBadge" onclick="switchTab('shop')">
-                <span class="pts-icon">💎</span>
-                <span class="pts-val" id="headerPointsVal">500</span>
-                <span class="pts-plus">+</span>
-            </div>
-        </header>
 
-        <!-- مساحة المحتوى القابلة للتبديل -->
-        <main class="main-content">
+  <div class="shabah-container">
+    <!-- Header HUD with Neon Skull -->
+    <header class="shabah-header">
+      <div class="skull-avatar-wrap">
+        <img src="/static/assets/skull.svg" alt="Shabah Skull" id="mainSkull">
+      </div>
+      <h1 class="title-glow">شــبــح</h1>
+      <div class="status-badge">
+        <span class="status-dot"></span>
+        <span>مشفر • اتصال مباشر مع المطور</span>
+      </div>
+    </header>
 
-            <!-- ================= 1. قسم لعبة الطيارة (CRASH / AVIATOR) ================= -->
-            <section id="tab-crash" class="tab-pane active">
-                <!-- شريط تاريخ الجولات السابقة -->
-                <div class="crash-history-bar" id="crashHistoryBar">
-                    <span class="hist-badge purple">2.45x</span>
-                    <span class="hist-badge cyan">1.80x</span>
-                    <span class="hist-badge gold">6.12x</span>
-                    <span class="hist-badge red">1.10x</span>
-                    <span class="hist-badge cyan">3.25x</span>
-                </div>
-
-                <!-- مسرح الطيران (Sky Canvas) -->
-                <div class="flight-stage" id="flightStage">
-                    <!-- سماء الفضاء وخطوط الارتفاع -->
-                    <div class="stage-grid"></div>
-                    <div class="stars-bg"></div>
-
-                    <!-- الطائرة المتحركة -->
-                    <div class="rocket-wrapper" id="rocketWrapper">
-                        <svg class="rocket-svg" viewBox="0 0 64 64" fill="none">
-                            <path d="M54 10C54 10 42 12 32 22C26 28 22 36 20 44L28 46L36 54C44 52 52 48 58 42C68 32 70 20 70 20C70 20 58 22 54 10Z" fill="url(#jet_grad)" transform="translate(-10, -5)"/>
-                            <path d="M18 42L8 46L12 36L18 42Z" fill="#ff007f"/>
-                            <path d="M38 62L42 52L32 48L38 62Z" fill="#ff007f"/>
-                            <circle cx="44" cy="24" r="4" fill="#00f5d4"/>
-                            <path id="flame" d="M14 48C10 52 4 58 2 64C8 62 14 56 18 52C16 50 14 48 14 48Z" fill="#ffaa00"/>
-                            <defs>
-                                <linearGradient id="jet_grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" stop-color="#00f5d4"/>
-                                    <stop offset="50%" stop-color="#9d4edd"/>
-                                    <stop offset="100%" stop-color="#7b2cbf"/>
-                                </linearGradient>
-                            </defs>
-                        </svg>
-                        <div class="thrust-smoke"></div>
-                    </div>
-
-                    <!-- انفجار الطائرة -->
-                    <div class="explosion-fx hidden" id="explosionFx">
-                        <span class="boom-text">💥 انـفـجـار!</span>
-                    </div>
-
-                    <!-- عداد المضاعف الكبير -->
-                    <div class="multiplier-display" id="multiplierDisplay">
-                        <span id="multiplierValue">1.00</span><span class="x-mark">x</span>
-                    </div>
-                    <div class="flight-state-tag" id="flightStateTag">جاهز للإقلاع</div>
-                </div>
-
-                <!-- لوحة التحكم بالرهان والسحب -->
-                <div class="crash-controls-deck">
-                    <div class="bet-input-row">
-                        <span class="input-label">مبلغ الرهان (نقاط):</span>
-                        <div class="input-stepper">
-                            <button class="step-btn" onclick="adjustBet(-50)">-50</button>
-                            <input type="number" id="betInput" value="50" min="10" step="10">
-                            <button class="step-btn" onclick="adjustBet(50)">+50</button>
-                            <button class="step-btn max" onclick="setBetMax()">الأقصى</button>
-                        </div>
-                    </div>
-
-                    <button id="crashActionBtn" class="btn-main-action fly-btn" onclick="handleCrashAction()">
-                        <span class="btn-title" id="crashBtnTitle">🚀 إقلاع الطائرة</span>
-                        <span class="btn-sub" id="crashBtnSub">رهان: 50 نقطة</span>
-                    </button>
-                </div>
-            </section>
-
-            <!-- ================= 2. قسم الألعاب والبحث عن خصم ================= -->
-            <section id="tab-games" class="tab-pane">
-                <div class="games-nav-pills">
-                    <button class="pill active" onclick="switchGameMode('xo')">⭕❌ لعبة X-O</button>
-                    <button class="pill" onclick="switchGameMode('reflex')">⚡ سرعة النيون</button>
-                </div>
-
-                <!-- لعبة X-O -->
-                <div id="game-xo-view" class="sub-game-view">
-                    <!-- خيارات اللعب: فردي أو بحث عن خصم -->
-                    <div class="mode-selector-box" id="xoModeSelector">
-                        <div class="mode-card" onclick="startSoloXO()">
-                            <span class="mode-icon">🤖</span>
-                            <h3>لعب فردي</h3>
-                            <p>تحدَّ الذكاء الاصطناعي (تدريب مجاني)</p>
-                        </div>
-                        <div class="mode-card highlight" onclick="showMatchmakingModal()">
-                            <span class="mode-icon">⚔️</span>
-                            <h3>بحث عن خصم أونلاين</h3>
-                            <p>نافس لاعب حقيقي في خيال برهان نقاط!</p>
-                        </div>
-                    </div>
-
-                    <!-- شاشة المباراة المباشرة -->
-                    <div class="active-match-container hidden" id="activeMatchContainer">
-                        <div class="match-header">
-                            <div class="player-tag p1">
-                                <span class="sym" id="p1Symbol">X</span>
-                                <span class="name" id="p1Name">أنت</span>
-                            </div>
-                            <div class="vs-badge">VS</div>
-                            <div class="player-tag p2">
-                                <span class="sym" id="p2Symbol">O</span>
-                                <span class="name" id="p2Name">الخصم</span>
-                            </div>
-                        </div>
-
-                        <div class="turn-indicator" id="turnIndicator">دورك الآن للعب 🎯</div>
-
-                        <!-- شبكة الـ 3x3 -->
-                        <div class="xo-board" id="xoBoard">
-                            <div class="xo-cell" data-index="0" onclick="handleCellClick(0)"></div>
-                            <div class="xo-cell" data-index="1" onclick="handleCellClick(1)"></div>
-                            <div class="xo-cell" data-index="2" onclick="handleCellClick(2)"></div>
-                            <div class="xo-cell" data-index="3" onclick="handleCellClick(3)"></div>
-                            <div class="xo-cell" data-index="4" onclick="handleCellClick(4)"></div>
-                            <div class="xo-cell" data-index="5" onclick="handleCellClick(5)"></div>
-                            <div class="xo-cell" data-index="6" onclick="handleCellClick(6)"></div>
-                            <div class="xo-cell" data-index="7" onclick="handleCellClick(7)"></div>
-                            <div class="xo-cell" data-index="8" onclick="handleCellClick(8)"></div>
-                        </div>
-
-                        <button class="btn-secondary" style="margin-top: 16px;" onclick="quitCurrentMatch()">الخروج من المباراة</button>
-                    </div>
-
-                    <!-- نافذة البحث عن خصم Modal -->
-                    <div class="modal-overlay hidden" id="matchModal">
-                        <div class="modal-card">
-                            <h3>⚔️ البحث عن خصم أونلاين</h3>
-                            <p>حدد قيمة رهان النقاط للمباراة الفائز يأخذ كل شيء:</p>
-                            <div class="bet-chips">
-                                <button class="chip active" onclick="selectMatchBet(50)">50 نقطة</button>
-                                <button class="chip" onclick="selectMatchBet(100)">100 نقطة</button>
-                                <button class="chip" onclick="selectMatchBet(250)">250 نقطة</button>
-                            </div>
-                            <div class="search-status-box" id="searchStatusBox">
-                                <div class="loader-spinner" id="searchSpinner" style="display:none; margin: 10px auto;"></div>
-                                <span id="searchStatusText">اضغط لبدء البحث</span>
-                            </div>
-                            <div class="modal-actions">
-                                <button id="startSearchBtn" class="btn-main-action" onclick="startMatchmaking()">بدء البحث 🔍</button>
-                                <button class="btn-secondary" onclick="closeMatchModal()">إلغاء</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- لعبة سرعة النيون Reflex -->
-                <div id="game-reflex-view" class="sub-game-view hidden">
-                    <div class="reflex-card">
-                        <h3>⚡ تحدي سرعة النيون</h3>
-                        <p>اضغط على الدوائر المشعة فور ظهورها لجمع النقاط خلال 20 ثانية!</p>
-                        <div class="reflex-stats">
-                            <span>النقاط: <b id="reflexScore">0</b></span>
-                            <span>الوقت المتبقي: <b id="reflexTimer">20</b> ث</span>
-                        </div>
-                        <div class="reflex-box" id="reflexBox">
-                            <div class="start-overlay" id="reflexStartOverlay">
-                                <button class="btn-main-action" onclick="startReflexGame()">ابدأ التحدي 🎮</button>
-                            </div>
-                            <div class="target-circle hidden" id="reflexTarget" onclick="hitReflexTarget()"></div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- ================= 3. قسم راديو خيال FM ومسجل الصوت ================= -->
-            <section id="tab-radio" class="tab-pane">
-                <div class="radio-deck">
-                    <!-- مشغل الراديو الرئيسي -->
-                    <div class="current-station-card">
-                        <div class="station-icon-glow" id="currentStationIcon">📖</div>
-                        <div class="station-meta">
-                            <h2 id="currentStationName">إذاعة القرآن الكريم - القاهرة</h2>
-                            <span class="genre-badge" id="currentStationGenre">بث حي مباشر 24/7</span>
-                        </div>
-
-                        <!-- تموجات الصوت الترددية البصرية (Equalizer) -->
-                        <div class="equalizer-bars" id="equalizerBars">
-                            <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-                        </div>
-
-                        <!-- أزرار المشغل -->
-                        <div class="player-controls">
-                            <button id="radioPlayBtn" class="radio-btn-play" onclick="toggleRadioPlay()">
-                                <span id="playIcon">▶️</span>
-                            </button>
-                            <div class="volume-slider-box">
-                                <span>🔈</span>
-                                <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="0.8" oninput="setRadioVolume(this.value)">
-                                <span>🔊</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- مسجل الصوت والكاسيت -->
-                    <div class="recorder-box">
-                        <div class="recorder-header">
-                            <span>🎙️ مسجل خيال الصوتي الفوري</span>
-                            <span id="recordTimer" class="rec-time">00:00</span>
-                        </div>
-                        <div class="recorder-actions">
-                            <button id="recordBtn" class="rec-btn" onclick="toggleRecording()">
-                                <span class="rec-dot"></span> <span id="recordBtnText">بدء التسجيل</span>
-                            </button>
-                            <audio id="recordedAudio" controls class="hidden" style="width: 100%; margin-top: 10px;"></audio>
-                        </div>
-                    </div>
-
-                    <!-- قائمة المحطات الحية -->
-                    <h3 class="section-sub-title">📡 المحطات الإذاعية المتاحة</h3>
-                    <div class="stations-list" id="stationsList">
-                        <!-- تُحقن تلقائياً بالجافاسكربت -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- ================= 4. قسم المتجر وشراء النقاط ================= -->
-            <section id="tab-shop" class="tab-pane">
-                <!-- كرت المحفظة الشخصية -->
-                <div class="wallet-card">
-                    <div class="wallet-header">
-                        <span>محفظة خيال 💎</span>
-                        <span class="vip-tag">عضوية مميزة</span>
-                    </div>
-                    <div class="wallet-balance">
-                        <h2 id="storePointsBalance">500</h2>
-                        <span class="unit">نقطة خيال</span>
-                    </div>
-                    <!-- زر المكافأة اليومية -->
-                    <button id="dailyBonusBtn" class="btn-daily-gift" onclick="claimDailyBonus()">
-                        <span>🎁</span>
-                        <span id="dailyBtnText">استلم هديتك اليومية (+100 نقطة)</span>
-                    </button>
-                </div>
-
-                <!-- باقات شحن النقاط -->
-                <h3 class="section-sub-title">⚡ باقات شراء وشحن النقاط</h3>
-                <p class="store-hint">يتم إرسال طلب الشحن فوراً للمشرف في تلجرام لتأكيد العملية:</p>
-
-                <div class="packages-grid">
-                    <div class="package-card" onclick="requestPackage('باقة البداية', 1000, '1$')">
-                        <div class="pkg-header">
-                            <span class="pkg-icon">📦</span>
-                            <h4>باقة البداية</h4>
-                        </div>
-                        <div class="pkg-amount">+1,000 نقطة</div>
-                        <div class="pkg-price">1.00 $</div>
-                        <button class="pkg-btn">طلب الشحن</button>
-                    </div>
-
-                    <div class="package-card popular" onclick="requestPackage('باقة المحترفين', 5000, '4$')">
-                        <div class="popular-ribbon">الأكثر طلباً ⭐</div>
-                        <div class="pkg-header">
-                            <span class="pkg-icon">🚀</span>
-                            <h4>باقة المحترفين</h4>
-                        </div>
-                        <div class="pkg-amount">+5,000 نقطة</div>
-                        <div class="pkg-price">4.00 $</div>
-                        <button class="pkg-btn">طلب الشحن</button>
-                    </div>
-
-                    <div class="package-card" onclick="requestPackage('باقة النخبة', 15000, '10$')">
-                        <div class="pkg-header">
-                            <span class="pkg-icon">👑</span>
-                            <h4>باقة النخبة</h4>
-                        </div>
-                        <div class="pkg-amount">+15,000 نقطة</div>
-                        <div class="pkg-price">10.00 $</div>
-                        <button class="pkg-btn">طلب الشحن</button>
-                    </div>
-
-                    <div class="package-card gold-border" onclick="requestPackage('باقة خيال الملكية', 50000, '25$')">
-                        <div class="pkg-header">
-                            <span class="pkg-icon">💎</span>
-                            <h4>باقة خيال الملكية</h4>
-                        </div>
-                        <div class="pkg-amount">+50,000 نقطة</div>
-                        <div class="pkg-price">25.00 $</div>
-                        <button class="pkg-btn">طلب الشحن</button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- ================= 5. قسم المكالمات المباشرة (WEB-RTC) ================= -->
-            <section id="tab-call" class="tab-pane">
-                <div class="call-stage-wrapper">
-                    <!-- كرت شاشة المكالمة -->
-                    <div class="remote-stream-container" id="remoteContainer">
-                        <div class="audio-avatar-card" id="remoteAvatarCard">
-                            <div class="avatar-ring-pulse">
-                                <img src="/images/avatar.jpg" alt="المتصل" class="remote-avatar-img">
-                            </div>
-                            <h3 id="remoteUserName">الطرف الآخر</h3>
-                            <p class="role-tag">مكالمة مشفرة P2P</p>
-                        </div>
-                        <video id="remoteVideo" autoplay playsinline class="remote-video hidden"></video>
-                    </div>
-
-                    <!-- معاينة الفيديو المحلي -->
-                    <div class="local-stream-container" id="localContainer">
-                        <video id="localVideo" autoplay playsinline muted class="local-video"></video>
-                        <div class="local-placeholder" id="localPlaceholder">كاميرتك مغلقة</div>
-                    </div>
-
-                    <div class="call-timer-container" id="callTimerContainer">
-                        <span class="recording-icon"></span>
-                        <span id="callTimer">00:00</span>
-                    </div>
-
-                    <!-- إشعار الانتظار -->
-                    <div class="waiting-card" id="waitingCard">
-                        <div class="loader-spinner"></div>
-                        <h2>غرفة مكالمة خيال</h2>
-                        <p>في انتظار انضمام المشرف أو الطرف الآخر للمكالمة...</p>
-                        <div class="room-share-box">
-                            <input type="text" id="roomLinkInput" readonly value="">
-                            <button id="copyLinkBtn" class="btn-secondary">نسخ الرابط</button>
-                        </div>
-                    </div>
-
-                    <!-- أزرار المكالمة -->
-                    <div class="call-controls">
-                        <button id="toggleMicBtn" class="control-btn active" title="الميكروفون">🎙️</button>
-                        <button id="toggleCamBtn" class="control-btn" title="الكاميرا">📹</button>
-                        <button id="flipCamBtn" class="control-btn" title="قلب">🔄</button>
-                        <button id="endCallBtn" class="control-btn btn-danger" title="إنهاء">❌</button>
-                    </div>
-                </div>
-            </section>
-
-        </main>
-
-        <!-- شريط التنقل السفلي العصري (Bottom Navigation Bar) -->
-        <nav class="bottom-nav">
-            <button class="nav-item active" data-tab="crash" onclick="switchTab('crash')">
-                <span class="nav-icon">🚀</span>
-                <span class="nav-label">الطيارة</span>
-            </button>
-            <button class="nav-item" data-tab="games" onclick="switchTab('games')">
-                <span class="nav-icon">🎮</span>
-                <span class="nav-label">الألعاب</span>
-            </button>
-            <button class="nav-item" data-tab="radio" onclick="switchTab('radio')">
-                <span class="nav-icon">📻</span>
-                <span class="nav-label">الراديو</span>
-            </button>
-            <button class="nav-item" data-tab="shop" onclick="switchTab('shop')">
-                <span class="nav-icon">💎</span>
-                <span class="nav-label">المتجر</span>
-            </button>
-            <button class="nav-item" data-tab="call" onclick="switchTab('call')">
-                <span class="nav-icon">📞</span>
-                <span class="nav-label">المكالمات</span>
-            </button>
-        </nav>
+    <!-- Call Action Request Bar -->
+    <div class="call-actions-bar">
+      <button id="callVoiceBtn" class="btn-neon-action">
+        <span>🎙️</span>
+        <span>طلب صعود مايك</span>
+      </button>
+      <button id="callVideoBtn" class="btn-neon-action video-btn">
+        <span>📷</span>
+        <span>طلب صعود كاميرا</span>
+      </button>
     </div>
 
-    <!-- عنصر الصوت للراديو -->
-    <audio id="globalRadioAudio" preload="none"></audio>
+    <!-- Chat Messages Window -->
+    <main class="chat-window">
+      <div class="chat-messages" id="chatMessages">
+        <!-- Messages will be injected here dynamically -->
+      </div>
 
-    <script src="/js/app.js"></script>
+      <!-- Chat Input Controls -->
+      <div class="chat-input-bar">
+        <!-- Hidden File Input for fallback gallery upload -->
+        <input type="file" id="fileInput" accept="image/*" style="display:none">
+
+        <!-- Action Tools -->
+        <button id="cameraSnapBtn" class="btn-circle-tool" title="التقاط صورة بكاميرا فورية">📷</button>
+        <button id="micRecordBtn" class="btn-circle-tool" title="تسجيل بصمة صوتية">🎙️</button>
+
+        <!-- Recording Bar (Visible when recording voice note) -->
+        <div class="recording-bar" id="recordingBar">
+          <div class="recording-dot"></div>
+          <span class="recording-timer" id="recordingTimer">00:00</span>
+          <div style="flex:1"></div>
+          <button id="stopRecordBtn" class="btn-circle-tool" style="width:30px;height:30px;background:var(--neon-pink);color:#fff" title="إرسال البصمة">✓</button>
+          <button id="cancelRecordBtn" class="btn-circle-tool" style="width:30px;height:30px;background:#333;color:#fff" title="إلغاء">✕</button>
+        </div>
+
+        <!-- Normal Text Input -->
+        <input type="text" id="msgInput" class="chat-input" placeholder="اكتب رسالتك المباشرة إلى شبح..." autocomplete="off">
+        <button id="sendBtn" class="btn-circle-tool btn-send-msg" title="إرسال">➤</button>
+      </div>
+    </main>
+  </div>
+
+  <!-- Real-Time WebRTC Call Modal -->
+  <div class="call-modal" id="callModal">
+    <div class="call-header-info">
+      <h2 class="call-title">💀 اتصال مباشر مع شبح</h2>
+      <p class="call-status-text" id="callStatusText">بانتظار موافقة شبح...</p>
+    </div>
+
+    <div class="video-grid">
+      <!-- Remote Developer Feed (or Ghost Mask if hidden) -->
+      <video id="remoteVideo" class="remote-video" autoplay playsinline></video>
+      <div id="skullMaskView" class="remote-skull-mask">
+        <img src="/static/assets/skull.svg" alt="Ghost Disguise Mask">
+        <div class="mask-label">💀 هوية المطور مشفرة [شبح]</div>
+      </div>
+
+      <!-- Visitor Local Video Preview -->
+      <video id="localVideo" class="local-video-preview" autoplay playsinline muted></video>
+    </div>
+
+    <div class="call-controls-row">
+      <button id="toggleMicBtn" class="btn-call-ctrl" title="كتم/تفعيل المايك">🎙️</button>
+      <button id="toggleVideoBtn" class="btn-call-ctrl" title="إيقاف/تفعيل الكاميرا">📷</button>
+      <button id="hangupBtn" class="btn-call-ctrl btn-hangup" title="إنهاء المكالمة">📞</button>
+    </div>
+  </div>
+
+  <!-- Camera Snapshot Modal -->
+  <div class="camera-snap-modal" id="cameraSnapModal">
+    <h3 style="color:#00f3ff;margin-top:10px;">📷 التقاط صورة مباشرة للمطور</h3>
+    <video id="snapVideo" class="snap-video-feed" autoplay playsinline></video>
+    <div style="display:flex;gap:15px;margin-bottom:20px;">
+      <button id="takeSnapBtn" class="btn-neon-action" style="padding:12px 30px;font-size:16px;">📸 التقاط وإرسال</button>
+      <button id="closeSnapBtn" class="btn-neon-action video-btn" style="padding:12px 25px;">إلغاء</button>
+    </div>
+  </div>
+
+  <!-- Banned Screen (Full overlay if user is banned) -->
+  <div class="banned-screen" id="bannedScreen">
+    <div class="banned-icon">🚫</div>
+    <h1 style="color:#ff3344;font-size:28px;margin-bottom:10px;">تم حظرك نهائياً</h1>
+    <p style="color:#8b9bb4;max-width:350px;">تم منعك من الوصول إلى منصة شبح بقرار من الإدارة والمطور.</p>
+  </div>
+
+  <!-- Muted Toast Notification -->
+  <div class="muted-toast" id="mutedToast">
+    🔇 تم كتمك بواسطة المطور. لا يمكنك الإرسال أو التحدث.
+  </div>
+
+  <!-- Application Script -->
+  <script src="/static/js/app.js"></script>
 </body>
 </html>

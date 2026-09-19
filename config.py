@@ -2,80 +2,23 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file if available
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
-# Telegram Bot Credentials
-BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
-ADMIN_IDS_RAW = os.getenv("ADMIN_IDS", "123456789")
-ADMIN_IDS = [int(i.strip()) for i in ADMIN_IDS_RAW.split(",") if i.strip().isdigit()]
+BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+DEVELOPER_ID = os.getenv("DEVELOPER_ID", "").strip()
+ADMIN_SECRET_KEY = os.getenv("ADMIN_SECRET_KEY", "shabah_admin_secret").strip()
+WEBAPP_URL = os.getenv("WEBAPP_URL", "http://localhost:8000").strip().rstrip("/")
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", 8000))
 
-# Developer / Support info
-DEV_USERNAME = os.getenv("DEV_USERNAME", "@OkarDev")
-SUPPORT_CHANNEL = os.getenv("SUPPORT_CHANNEL", "")
+UPLOAD_DIR = BASE_DIR / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
+STATIC_DIR = BASE_DIR / "static"
 
-# WebApp / Capsule URL
-# The WebApp capsule can be hosted locally via server.py or hosted online
-_public_base = os.getenv("BASE_URL", "").strip().rstrip("/")
-railway_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip().rstrip("/")
-if railway_domain and not railway_domain.startswith(("https://", "http://")):
-    railway_domain = "https://" + railway_domain
-if _public_base and not _public_base.startswith(("https://", "http://")):
-    _public_base = "https://" + _public_base
-# Railway: لا نسمح لـ localhost أن يتغلب على الدومين العام.
-if railway_domain and (not _public_base or "localhost" in _public_base or "127.0.0.1" in _public_base):
-    _public_base = railway_domain
-_webapp_override = os.getenv("WEBAPP_URL", "").strip().rstrip("/")
-if _webapp_override and not _webapp_override.startswith(("https://", "http://")):
-    _webapp_override = "https://" + _webapp_override
-WEBAPP_URL = _webapp_override or _public_base or "http://localhost:8080"
-
-# Database Path
-DB_PATH = BASE_DIR / "data" / "khayal.db"
-
-# Logo Path
-LOGO_PATH = BASE_DIR / "assets" / "okar_logo.jpg"
-
-# Live Radio FM Stream Channels (High quality real audio streams)
-RADIO_STREAMS = {
-    "quran_cairo": {
-        "title": "📻 إذاعة القرآن الكريم - القاهرة",
-        "url": "https://stream.zeno.fm/8wv40vdbtm0uv",
-        "genre": "قرآن كريم"
-    },
-    "quran_makkah": {
-        "title": "🕋 إذاعة القرآن الكريم - الحرم المكي",
-        "url": "https://stream.radiojar.com/0tpy1h0kxtzuv",
-        "genre": "تلاوات مباركة"
-    },
-    "bbc_arabic": {
-        "title": "🌍 بي بي سي عربي (BBC Arabic FM)",
-        "url": "https://stream.live.vc.bbcmedia.co.uk/bbc_arabic_radio",
-        "genre": "أخبار وتحليلات عالمية"
-    },
-    "monte_carlo": {
-        "title": "🎙️ مونت كارلو الدولية (MCD FM)",
-        "url": "https://montecarlodoualiyaaudio.akacdn.net/mcd/ar/midfi/mp3/mcd_midfi.mp3",
-        "genre": "أخبار وبرامج حوارية"
-    },
-    "nogoum_fm": {
-        "title": "🎶 نجوم إف إم (Nogoum FM 100.6)",
-        "url": "https://audiostreaming.twesto.com/nogoumfm",
-        "genre": "موسيقى وبرامج شبابية"
-    },
-    "rotana_fm": {
-        "title": "🎵 روتانا إف إم (Rotana FM)",
-        "url": "https://stream.zeno.fm/f3wvbbw41qruv",
-        "genre": "طرب وأغاني عربية"
-    },
-    "mix_fm": {
-        "title": "🎧 ميكس إف إم (Mix FM)",
-        "url": "https://stream.zeno.fm/24u1k3w11qruv",
-        "genre": "أحدث الإيقاعات والأغاني"
-    }
-}
-
-# Neon UI Branding Text Decorators
-NEON_HEADER = "🪶 ❪ أوكــار ❫ • ᴏᴋᴀʀ ɴᴇᴏɴ sʏsᴛᴇᴍ\n⚡️ ◈ ─────────────── ◈ ⚡️"
-NEON_FOOTER = "⚡️ ◈ ─────────────── ◈ ⚡️\n🪶 ᴍᴀᴅᴇ ʙʏ ᴏᴋᴀʀ ɢᴏʟᴅᴇɴ ғᴇᴀᴛʜᴇʀ"
+# Google STUN servers for WebRTC
+ICE_SERVERS = [
+    {"urls": "stun:stun.l.google.com:19302"},
+    {"urls": "stun:stun1.l.google.com:19302"},
+    {"urls": "stun:stun2.l.google.com:19302"}
+]

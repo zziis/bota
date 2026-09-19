@@ -1,89 +1,57 @@
-import sys
-
-# ضمان دعم ترميز UTF-8 على أنظمة Windows لمنع أخطاء الرموز التعبيرية
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-if hasattr(sys.stderr, "reconfigure"):
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-
 import asyncio
 import logging
-from aiohttp import web
-from src.config import BOT_TOKEN, ADMIN_IDS, PORT, HOST, BASE_URL, APP_NAME
-from src.db import init_db
-from database import init_db as init_legacy_features_db
-from handlers import common, group_guard, support, radio, random_chat, complaints, developer_zalzala
-from src.server import create_app
-from src.bot import bot
-from aiogram import Dispatcher
+import uvicorn
+from config import HOST, PORT, BOT_TOKEN, ADMIN_SECRET_KEY, WEBAPP_URL
+from server import app
+from bot import start_bot
 
-# Dispatcher نظيف: يمنع تعارض أزرار/أوامر النسخة القديمة داخل src/bot.py
-dp = Dispatcher()
-
-# إعداد السجلات (Logging)
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - [%(levelname)s] - %(name)s: %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)]
+    format="%(asctime)s | %(name)s | %(levelname)s | %(message)s"
 )
-logger = logging.getLogger("KhayalMain")
+logger = logging.getLogger("ShabahLauncher")
 
-async def start_web_server():
-    """تشغيل خادم الويب وتطبيق Mini App وإشارات WebRTC"""
-    app = create_app()
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, HOST, PORT)
-    await site.start()
-    logger.info(f"خادم تطبيق خيال يعمل الآن على: http://{HOST}:{PORT}")
-    logger.info(f"رابط Mini App والمكالمات: {BASE_URL}")
-    return runner
+async def run_fastapi_server():
+    config = uvicorn.Config(
+        app=app,
+        host=HOST,
+        port=PORT,
+        log_level="info",
+        access_log=True
+    )
+    server = uvicorn.Server(config)
+    await server.serve()
 
 async def main():
-    print("=" * 50)
-    print(f"    منصة وبوت تواصل {APP_NAME}")
-    print("=" * 50)
+    print("""
+    ========================================================
+       💀 مــنــصــة شــبــح | SHABAH NEON PLATFORM 💀
+    ========================================================
+    ⚡ النظام نشط ومشفر بالكامل
+    🌐 رابط المنصة (Telegram Mini App): http://localhost:{port}
+    🛡️ رابط لوحة المطور: http://localhost:{port}/ghost-admin?secret={secret}
+    📡 حالة بوت تلجرام: {bot_status}
+    ========================================================
+    """.format(
+        port=PORT,
+        secret=ADMIN_SECRET_KEY,
+        bot_status="متصل وشغال ✅" if BOT_TOKEN else "غير مفعل (في انتظار وضع BOT_TOKEN في .env) ⚠️"
+    ))
 
-    # 1. تهيئة قاعدة البيانات
-    logger.info("جاري تهيئة قاعدة البيانات المحلية SQLite...")
-    await init_db()
-    await init_legacy_features_db()
-    logger.info("قاعدة البيانات الموحدة جاهزة بنجاح.")
-
-    # دمج خصائص أوكار القديمة داخل Dispatcher الرئيسي نفسه.
-    # بهذه الطريقة يوجد بوت واحد وPolling واحد فقط على Railway.
-    for router in (common.router, developer_zalzala.router, group_guard.router,
-                   support.router, radio.router, random_chat.router, complaints.router):
-        dp.include_router(router)
-
-    # 2. تشغيل خادم الويب
-    web_runner = await start_web_server()
-
-    # 3. تشغيل بوت تلجرام
-    if not BOT_TOKEN or BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN_HERE":
-        logger.warning("=" * 60)
-        logger.warning("تنبيه: لم يتم تعيين BOT_TOKEN في ملف .env حتى الآن!")
-        logger.warning("خادم المكالمات وتطبيق الويب يعمل، لكن البوت لن يعمل حتى تضع التوكن.")
-        logger.warning("يرجى نسخ .env.example إلى .env ووضع توكن البوت ومعرف المشرف.")
-        logger.warning("=" * 60)
-        # إبقاء خادم الويب يعمل
-        while True:
-            await asyncio.sleep(3600)
+    # Run both the FastAPI server and Telegram Bot concurrently
+    tasks = [
+        asyncio.create_task(run_fastapi_server())
+    ]
+    
+    if BOT_TOKEN:
+        tasks.append(asyncio.create_task(start_bot()))
     else:
-        logger.info(f"جاري تشغيل بوت تلجرام للمشرفين: {ADMIN_IDS}")
-        try:
-            # حذف أي Webhook قديم لتفادي التعارض مع Polling
-            await bot.delete_webhook(drop_pending_updates=True)
-            logger.info("البوت متصل وجاهز لاستقبال الرسائل والمكالمات!")
-            await dp.start_polling(bot)
-        except Exception as e:
-            logger.error(f"حدث خطأ أثناء تشغيل البوت: {e}")
-        finally:
-            await bot.session.close()
-            await web_runner.cleanup()
+        logger.warning("BOT_TOKEN is empty. Run with web server only. Set BOT_TOKEN in .env to enable Telegram Bot.")
+
+    await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        logger.info("تم إيقاف تشغيل النظام.")
+        logger.info("💀 تم إيقاف منصة شبح.")
