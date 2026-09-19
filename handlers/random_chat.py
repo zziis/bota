@@ -1,4 +1,5 @@
-﻿from aiogram import Router, F, Bot
+from aiogram import Router, F
+from aiogram.dispatcher.event.bases import SkipHandler, Bot
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from config import NEON_HEADER, NEON_FOOTER
 from database import (
@@ -253,7 +254,7 @@ async def relay_random_chat_messages(message: Message, bot: Bot):
     user_id = message.from_user.id
     partner_id = await get_active_chat_partner(user_id)
     if not partner_id:
-        return  # Not in active random chat
+        raise SkipHandler()  # اسمح لمعالج مراسلة الإدارة باستلام الرسالة
 
     # Relay content safely
     try:

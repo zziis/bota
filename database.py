@@ -310,3 +310,70 @@ async def get_rooms() -> List[Dict]:
         async with db.execute("SELECT * FROM capsule_rooms ORDER BY created_at DESC LIMIT 20") as cursor:
             rows = await cursor.fetchall()
             return [dict(r) for r in rows]
+
+# --- Persistent direct support inbox ---
+async def ensure_support_tables():
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.executescript("""
+        CREATE TABLE IF NOT EXISTS support_threads (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            first_name TEXT,
+            ack_enabled INTEGER DEFAULT 1,
+            ack_sent INTEGER DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS support_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            sender TEXT NOT NULL,
+            content TEXT,
+            media_type TEXT DEFAULT 'text',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        await db.commit()
+
+async def add_support_message(user_id:int, username:str, first_name:str, sender:str, content:str, media_type:str='text'):
+    await ensure_support_tables()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""INSERT INTO support_threads(user_id,username,first_name,updated_at)
+            VALUES(?,?,?,CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id) DO UPDATE SET username=excluded.username,first_name=excluded.first_name,updated_at=CURRENT_TIMESTAMP""",
+            (user_id, username or '', first_name or 'مستخدم'))
+        cur=await db.execute("INSERT INTO support_messages(user_id,sender,content,media_type) VALUES(?,?,?,?)",
+                             (user_id,sender,content,media_type))
+        await db.commit(); return cur.lastrowid
+
+async def get_support_threads(limit:int=40):
+    await ensure_support_tables()
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory=aiosqlite.Row
+        async with db.execute("""SELECT t.*, (SELECT content FROM support_messages m WHERE m.user_id=t.user_id ORDER BY m.id DESC LIMIT 1) last_message,
+            (SELECT COUNT(*) FROM support_messages m WHERE m.user_id=t.user_id) message_count
+            FROM support_threads t ORDER BY t.updated_at DESC LIMIT ?""", (limit,)) as c:
+            return [dict(x) for x in await c.fetchall()]
+
+async def get_support_history(user_id:int, limit:int=20):
+    await ensure_support_tables()
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory=aiosqlite.Row
+        async with db.execute("SELECT * FROM support_messages WHERE user_id=? ORDER BY id DESC LIMIT ?",(user_id,limit)) as c:
+            rows=[dict(x) for x in await c.fetchall()]
+            return list(reversed(rows))
+
+async def support_should_ack(user_id:int):
+    await ensure_support_tables()
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT ack_enabled,ack_sent FROM support_threads WHERE user_id=?",(user_id,)) as c:
+            r=await c.fetchone(); return bool(r and r[0] and not r[1])
+
+async def mark_support_ack_sent(user_id:int):
+    await ensure_support_tables()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE support_threads SET ack_sent=1 WHERE user_id=?",(user_id,)); await db.commit()
+
+async def set_support_ack(user_id:int, enabled:bool):
+    await ensure_support_tables()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE support_threads SET ack_enabled=?,ack_sent=? WHERE user_id=?",(1 if enabled else 0,0 if enabled else 1,user_id)); await db.commit()

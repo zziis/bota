@@ -622,92 +622,26 @@ function repositionReflexTarget() {
     target.style.top = `${Math.floor(Math.random() * maxY)}px`;
 }
 
-// ==================== 6. قسم راديو خيال FM ومسجل الصوت ====================
+// ==================== 6. راديو السيارة FM ====================
 let radioAudio = document.getElementById('globalRadioAudio');
-let isRadioPlaying = false;
-let currentStation = null;
-let mediaRecorder = null;
-let recordedChunks = [];
-let recordInterval = null;
-
-async function loadRadioStations() {
-    try {
-        const res = await fetch('/api/radio/stations');
-        const data = await res.json();
-        const list = document.getElementById('stationsList');
-        if (!list) return;
-
-        list.innerHTML = '';
-        data.stations.forEach((st, idx) => {
-            const item = document.createElement('div');
-            item.className = `station-item ${idx === 0 ? 'active' : ''}`;
-            item.innerHTML = `
-                <span class="st-icon">${st.icon}</span>
-                <div class="st-info">
-                    <h4>${st.name}</h4>
-                    <span>${st.genre}</span>
-                </div>
-            `;
-            item.onclick = () => selectStation(st, item);
-            list.appendChild(item);
-
-            if (idx === 0) currentStation = st;
-        });
-    } catch (e) {
-        console.error('خطأ تحميل الإذاعات:', e);
-    }
+let isRadioPlaying = false, currentStation = null, mediaRecorder = null, recordedChunks = [], recordInterval = null;
+let radioStations = [], currentStationIndex = 0, signalTimer = null, staticNoise = null;
+function signalState(text){const e=document.getElementById('radioSignalState');if(e)e.textContent=text;}
+function stopStaticNoise(){try{staticNoise?.stop()}catch(e){} staticNoise=null;}
+function startStaticNoise(){
+ stopStaticNoise(); try{const ctx=getAudioContext(), len=ctx.sampleRate*1.5, b=ctx.createBuffer(1,len,ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*0.10;const n=ctx.createBufferSource(),g=ctx.createGain();n.buffer=b;n.loop=true;g.gain.value=.14;n.connect(g);g.connect(ctx.destination);n.start();staticNoise=n;}catch(e){}
 }
-
-function selectStation(station, element) {
-    currentStation = station;
-    document.querySelectorAll('.station-item').forEach(el => el.classList.remove('active'));
-    if (element) element.classList.add('active');
-
-    document.getElementById('currentStationIcon').innerText = station.icon;
-    document.getElementById('currentStationName').innerText = station.name;
-    document.getElementById('currentStationGenre').innerText = station.genre;
-
-    if (isRadioPlaying) {
-        playCurrentStation();
-    }
+async function loadRadioStations(){
+ try{const res=await fetch('/api/radio/stations',{cache:'no-store'});const data=await res.json();radioStations=data.stations||[];const list=document.getElementById('stationsList');if(!list)return;list.innerHTML='';radioStations.forEach((st,idx)=>{const item=document.createElement('div');item.className=`station-item ${idx===0?'active':''}`;item.dataset.index=idx;item.innerHTML=`<span class="st-icon">${st.icon}</span><div class="st-info"><h4>${st.name}</h4><span>${st.genre}</span></div><b>FM</b>`;item.onclick=()=>selectStation(st,item,idx);list.appendChild(item)});if(radioStations[0])selectStation(radioStations[0],list.firstElementChild,0,false)}catch(e){signalState('📡 NO SIGNAL');startStaticNoise()}
 }
-
-function toggleRadioPlay() {
-    if (!currentStation) return;
-
-    if (isRadioPlaying) {
-        radioAudio.pause();
-        isRadioPlaying = false;
-        document.getElementById('playIcon').innerText = '▶️';
-        document.getElementById('equalizerBars').classList.remove('playing');
-    } else {
-        playCurrentStation();
-    }
-}
-
-function playCurrentStation() {
-    radioAudio.src = currentStation.url;
-    radioAudio.play().then(() => {
-        isRadioPlaying = true;
-        document.getElementById('playIcon').innerText = '⏸️';
-        document.getElementById('equalizerBars').classList.add('playing');
-    }).catch(err => {
-        console.error('خطأ تشغيل المحطة:', err);
-        tuneRadio(1, true);
-    });
-}
-
-function setRadioVolume(val) {
-    if (radioAudio) radioAudio.volume = parseFloat(val);
-}
-
-
-function tuneRadio(step=1, auto=false){
- const stations=[...document.querySelectorAll('.station-item')]; if(!stations.length)return;
- let i=stations.findIndex(x=>x.classList.contains('active')); if(i<0)i=0; i=(i+step+stations.length)%stations.length; stations[i].click();
- const f=document.getElementById('fmFrequency'); if(f)f.textContent=(87.5+(i*2.15)%20.4).toFixed(1)+' FM';
- if(!auto) playCurrentStation();
-}
+function selectStation(station,element,idx=0,autoplay=true){currentStation=station;currentStationIndex=idx;document.querySelectorAll('.station-item').forEach(el=>el.classList.remove('active'));element?.classList.add('active');document.getElementById('currentStationIcon').innerText=station.icon;document.getElementById('currentStationName').innerText=station.name;document.getElementById('currentStationGenre').innerText=station.genre;const f=document.getElementById('fmFrequency');if(f)f.textContent=(87.5+(idx*2.15)%20.4).toFixed(1)+' FM';signalState('📡 READY');if(autoplay||isRadioPlaying)playCurrentStation()}
+function toggleRadioPlay(){if(!currentStation)return;if(isRadioPlaying){radioAudio.pause();isRadioPlaying=false;stopStaticNoise();signalState('⏸ PAUSED');document.getElementById('playIcon').innerText='▶️';document.getElementById('equalizerBars').classList.remove('playing')}else playCurrentStation()}
+function playCurrentStation(){if(!currentStation)return;clearTimeout(signalTimer);stopStaticNoise();radioAudio.pause();radioAudio.src=currentStation.url;radioAudio.load();signalState('📡 TUNING...');signalTimer=setTimeout(()=>{if(!isRadioPlaying){signalState('📡 NO SIGNAL');startStaticNoise()}},9000);radioAudio.play().then(()=>{}).catch(()=>{clearTimeout(signalTimer);isRadioPlaying=false;signalState('📡 NO SIGNAL');startStaticNoise();document.getElementById('playIcon').innerText='▶️'})}
+radioAudio?.addEventListener('playing',()=>{clearTimeout(signalTimer);stopStaticNoise();isRadioPlaying=true;signalState('🟢 LIVE');document.getElementById('playIcon').innerText='⏸️';document.getElementById('equalizerBars').classList.add('playing')});
+radioAudio?.addEventListener('error',()=>{clearTimeout(signalTimer);isRadioPlaying=false;signalState('📡 NO SIGNAL');startStaticNoise();document.getElementById('playIcon').innerText='▶️';document.getElementById('equalizerBars').classList.remove('playing')});
+radioAudio?.addEventListener('stalled',()=>signalState('📡 WEAK SIGNAL...'));
+function setRadioVolume(val){if(radioAudio)radioAudio.volume=parseFloat(val)}
+function tuneRadio(step=1){if(!radioStations.length)return;currentStationIndex=(currentStationIndex+step+radioStations.length)%radioStations.length;const el=document.querySelector(`.station-item[data-index="${currentStationIndex}"]`);selectStation(radioStations[currentStationIndex],el,currentStationIndex,true);el?.scrollIntoView({behavior:'smooth',block:'nearest'})}
 
 // مسجل الصوت
 async function toggleRecording() {

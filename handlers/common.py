@@ -5,6 +5,7 @@ from config import NEON_HEADER, NEON_FOOTER, LOGO_PATH, DEV_USERNAME, ADMIN_IDS,
 from database import register_user, is_user_gbanned
 
 router = Router()
+_logo_file_id = None
 
 def get_main_keyboard(user_id: int) -> InlineKeyboardMarkup:
     buttons = [
@@ -26,7 +27,8 @@ def get_main_keyboard(user_id: int) -> InlineKeyboardMarkup:
     ]
     if user_id in ADMIN_IDS:
         buttons.append([
-            InlineKeyboardButton(text="⚡️ لوحة المطور وإضافات زلزال 🌋", callback_data="menu_dev")
+            InlineKeyboardButton(text="📥 مراسلات المستخدمين", callback_data="support_inbox"),
+            InlineKeyboardButton(text="⚡️ لوحة المطور 🌋", callback_data="menu_dev")
         ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -74,14 +76,20 @@ async def cmd_start(message: Message):
     # أرسل الشعار كرسالة مستقلة، ثم القائمة كنص مستقل.
     # السبب: Telegram لا يسمح بـ edit_text على رسالة صورة، وكانت جميع أزرار
     # callback تبدو وكأنها لا تعمل لأنها تحاول تعديل رسالة الصورة نفسها.
+    global _logo_file_id
     if LOGO_PATH.exists():
-        photo = FSInputFile(str(LOGO_PATH))
-        await message.answer_photo(photo=photo)
+        try:
+            sent = await message.answer_photo(photo=_logo_file_id or FSInputFile(str(LOGO_PATH)))
+            if sent.photo:
+                _logo_file_id = sent.photo[-1].file_id
+        except Exception:
+            pass
 
     await message.answer(caption, reply_markup=kb, parse_mode="Markdown")
 
 @router.callback_query(F.data == "main_menu")
 async def cb_main_menu(call: CallbackQuery):
+    await call.answer()
     user = call.from_user
     caption = (
         f"{NEON_HEADER}\n"
@@ -97,4 +105,4 @@ async def cb_main_menu(call: CallbackQuery):
             await call.message.edit_text(text=caption, reply_markup=kb, parse_mode="Markdown")
         except Exception:
             await call.message.answer(caption, reply_markup=kb, parse_mode="Markdown")
-    await call.answer()
+

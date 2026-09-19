@@ -43,10 +43,11 @@ def build_dispatcher():
     dp.include_router(common.router)
     dp.include_router(developer_zalzala.router)
     dp.include_router(group_guard.router)
-    dp.include_router(support.router)
     dp.include_router(radio.router)
     dp.include_router(random_chat.router)
     dp.include_router(complaints.router)
+    # مراسلة الإدارة أخيراً: تلتقط الرسائل الخاصة التي لم يعالجها قسم آخر.
+    dp.include_router(support.router)
     return dp
 
 
