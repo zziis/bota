@@ -1,5 +1,5 @@
-from aiogram import Router, F
-from aiogram.dispatcher.event.bases import SkipHandler, Bot
+from aiogram import Router, F, Bot
+from aiogram.dispatcher.event.bases import SkipHandler
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from config import NEON_HEADER, NEON_FOOTER
 from database import (
