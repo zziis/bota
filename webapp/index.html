@@ -1,0 +1,188 @@
+﻿<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>كبسولة أوكار 🪶 OKAR CAPSULE - الرومات الصوتية</title>
+    <!-- Telegram WebApp SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="capsule-container">
+        <!-- Header -->
+        <header class="capsule-header">
+            <div class="brand">
+                <img src="okar_logo.jpg" alt="Okar Logo" class="brand-logo">
+                <div class="brand-text">
+                    <h1>كبسولة أوكـار 🪶</h1>
+                    <span class="badge-live">● بث حي مباشر</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button id="createRoomBtn" class="btn-neon-gold">➕ إنشاء روم</button>
+                <div class="online-counter">👥 <span id="onlineCount">24</span></div>
+            </div>
+        </header>
+
+        <!-- Current Room Banner -->
+        <div class="room-banner">
+            <div class="room-info">
+                <h2 id="currentRoomTitle">👑 صالون أوكار الملكي - نقاشات عامة</h2>
+                <p id="currentRoomDesc">الروم الرسمية لتبادل الأحاديث والتواصل الصوتي والمرئي</p>
+            </div>
+            <button id="leaveRoomBtn" class="btn-pill">خروج</button>
+        </div>
+
+        <!-- 4-Mic Stage (منصة الـ 4 مايكات) -->
+        <section class="stage-section">
+            <div class="stage-header">
+                <h3>🎙️ منصة المتحدثين (4 مايكات رسمية)</h3>
+                <span class="stage-status">المقاعد المتاحة: <span id="availableMics">3</span>/4</span>
+            </div>
+
+            <div class="stage-grid">
+                <!-- Slot 1: Host -->
+                <div class="mic-slot active" id="slot-0">
+                    <div class="avatar-wrapper speaking">
+                        <img src="okar_logo.jpg" alt="Host" class="avatar-img">
+                        <div class="mic-status-indicator live">🎙️</div>
+                        <div class="sound-wave">
+                            <span></span><span></span><span></span>
+                        </div>
+                    </div>
+                    <span class="user-role host">👑 المضيف (Dev)</span>
+                    <span class="user-name">مطور أوكار</span>
+                    <button class="slot-action-btn" disabled>المضيف</button>
+                </div>
+
+                <!-- Slot 2 -->
+                <div class="mic-slot" id="slot-1">
+                    <div class="avatar-wrapper">
+                        <div class="avatar-placeholder">👤</div>
+                        <div class="mic-status-indicator mute">🔇</div>
+                        <div class="sound-wave">
+                            <span></span><span></span><span></span>
+                        </div>
+                    </div>
+                    <span class="user-role">مايك 1</span>
+                    <span class="user-name">شاغر</span>
+                    <button class="slot-action-btn take-mic" onclick="takeSlot(1)">اعتلاء المايك</button>
+                </div>
+
+                <!-- Slot 3 -->
+                <div class="mic-slot" id="slot-2">
+                    <div class="avatar-wrapper">
+                        <div class="avatar-placeholder">👤</div>
+                        <div class="mic-status-indicator mute">🔇</div>
+                        <div class="sound-wave">
+                            <span></span><span></span><span></span>
+                        </div>
+                    </div>
+                    <span class="user-role">مايك 2</span>
+                    <span class="user-name">شاغر</span>
+                    <button class="slot-action-btn take-mic" onclick="takeSlot(2)">اعتلاء المايك</button>
+                </div>
+
+                <!-- Slot 4 -->
+                <div class="mic-slot" id="slot-3">
+                    <div class="avatar-wrapper">
+                        <div class="avatar-placeholder">👤</div>
+                        <div class="mic-status-indicator mute">🔇</div>
+                        <div class="sound-wave">
+                            <span></span><span></span><span></span>
+                        </div>
+                    </div>
+                    <span class="user-role">مايك 3</span>
+                    <span class="user-name">شاغر</span>
+                    <button class="slot-action-btn take-mic" onclick="takeSlot(3)">اعتلاء المايك</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Video & Audio Stream Capsule (اتصال المايك والكاميرا) -->
+        <section class="media-stream-box">
+            <div class="video-container" id="videoContainer">
+                <video id="localVideo" autoplay playsinline muted></video>
+                <div class="video-overlay" id="videoOverlay">
+                    <div class="camera-off-icon">📷</div>
+                    <span>الكاميرا غير مفعلة</span>
+                </div>
+                <div class="stream-controls">
+                    <button id="toggleCamBtn" class="stream-btn" title="تشغيل الكاميرا">📹 تشغيل الكاميرا</button>
+                    <button id="toggleMicBtn" class="stream-btn live" title="كتم/تشغيل الصوت">🎙️ المايك: يعمل</button>
+                    <button id="raiseHandBtn" class="stream-btn" title="طلب الحديث">✋ رفع اليد</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Public Room Chat (الدردشة العامة للروم) -->
+        <section class="chat-section">
+            <div class="chat-header">
+                <h3>💬 الدردشة العامة المباشرة</h3>
+                <div class="reaction-bar">
+                    <button class="reaction-btn" onclick="sendReaction('🔥')">🔥</button>
+                    <button class="reaction-btn" onclick="sendReaction('🪶')">🪶</button>
+                    <button class="reaction-btn" onclick="sendReaction('❤️')">❤️</button>
+                    <button class="reaction-btn" onclick="sendReaction('👏')">👏</button>
+                    <button class="reaction-btn" onclick="sendReaction('⚡')">⚡</button>
+                </div>
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+                <div class="msg system">
+                    <span>⚡️ مرحباً بكم في كبسولة رومات أوكار! احترم القوانين واستمتع بالنقاش.</span>
+                </div>
+                <div class="msg">
+                    <span class="sender gold">👑 مطور أوكار:</span>
+                    <span class="text">أهلاً بجميع الأعضاء في كبسولة الرومات الجديدة! المايكات متاحة الآن.</span>
+                </div>
+                <div class="msg">
+                    <span class="sender cyan">👤 أحمد الساهر:</span>
+                    <span class="text">تصميم نيون خيالي ما شاء الله، الريشة الذهبية فخامة! 🪶✨</span>
+                </div>
+            </div>
+
+            <form id="chatForm" class="chat-input-bar">
+                <input type="text" id="chatInput" placeholder="اكتب رسالتك في الروم..." autocomplete="off">
+                <button type="submit" class="send-btn">إرسال 🚀</button>
+            </form>
+        </section>
+    </div>
+
+    <!-- Modal: Create Room -->
+    <div class="modal" id="createRoomModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🏰 إنشاء روم كبسولة جديدة</h3>
+                <button class="close-btn" id="closeModalBtn">&times;</button>
+            </div>
+            <form id="newRoomForm">
+                <div class="form-group">
+                    <label>اسم الروم:</label>
+                    <input type="text" id="roomTitleInput" placeholder="مثال: ديوانية شباب أوكار" required>
+                </div>
+                <div class="form-group">
+                    <label>موضوع أو وصف الروم:</label>
+                    <input type="text" id="roomDescInput" placeholder="سهرات طربية وتعارف هادف...">
+                </div>
+                <div class="form-group">
+                    <label>نوع الروم:</label>
+                    <select id="roomTypeSelect">
+                        <option value="public">🌍 روم عامة للجميع</option>
+                        <option value="vip">👑 روم VIP للمميزين</option>
+                        <option value="radio">📻 روم إذاعة واستماع</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-neon-gold full-width">تأكيد وبدء البث 🚀</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Floating reactions container -->
+    <div id="reactionsCanvas"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
