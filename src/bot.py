@@ -1,6 +1,7 @@
 import os
 import uuid
 import logging
+from urllib.parse import urlencode
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
@@ -25,35 +26,28 @@ bot = Bot(
 
 dp = Dispatcher()
 
-def make_miniapp_button(path: str, label: str, name: str = "") -> InlineKeyboardButton:
-    """إنشاء زر Mini App متوافق مع HTTPS والرابط المحلي"""
-    safe_name = name.replace(" ", "%20")
-    full_url = f"{BASE_URL}{path}?name={safe_name}"
-    if BASE_URL.startswith("https://"):
-        return InlineKeyboardButton(text=label, web_app=WebAppInfo(url=full_url))
-    else:
-        return InlineKeyboardButton(text=label, url=full_url)
+def get_call_url(room_id: str, name: str = "") -> str:
+    """توليد رابط المكالمة"""
+    # Encode the complete query string (including Arabic names) so Telegram receives a valid HTTPS URL.
+    query = urlencode({"room": room_id, "name": name})
+    return f"{BASE_URL}/call?{query}"
 
-# لوحة الأزرار الرئيسية الشاملة لجميع أقسام خيال
-def get_user_super_keyboard(name: str = "") -> InlineKeyboardMarkup:
+def make_call_button(room_id: str, label: str = "📞 فتح مكالمة خيال المباشرة", name: str = "") -> InlineKeyboardButton:
+    """إنشاء زر المكالمة كـ Mini App إذا كان الرابط يدعم HTTPS أو كرابط عادي"""
+    call_url = get_call_url(room_id, name)
+    if BASE_URL.startswith("https://"):
+        return InlineKeyboardButton(text=label, web_app=WebAppInfo(url=call_url))
+    else:
+        return InlineKeyboardButton(text=label, url=call_url)
+
+# لوحة الأزرار الرئيسية للمستخدم
+def get_user_main_keyboard(room_id: str = None, name: str = "") -> InlineKeyboardMarkup:
+    current_room = room_id or f"khayal-{uuid.uuid4().hex[:8]}"
     buttons = [
+        [make_call_button(current_room, "📞 مكالمة خيال المباشرة (صوت وفيديو)", name)],
         [
-            make_miniapp_button("/crash", "🚀 لعبة الطيارة (Crash)", name),
-            make_miniapp_button("/games", "🎮 ألعاب وتحدي الخصوم", name)
-        ],
-        [
-            make_miniapp_button("/radio", "📻 راديو خيال FM مباشر", name),
-            make_miniapp_button("/shop", "💎 المتجر ورصيد النقاط", name)
-        ],
-        [
-            make_miniapp_button("/call", "📞 مكالمة صوت وفيديو مباشرة", name)
-        ],
-        [
-            InlineKeyboardButton(text="🎁 هديتي اليومية", callback_data="claim_daily"),
-            InlineKeyboardButton(text="💰 رصيدي", callback_data="my_balance")
-        ],
-        [
-            InlineKeyboardButton(text="💬 حول خيال", callback_data="help_info")
+            InlineKeyboardButton(text="💬 حول خيال وطريقة الاستخدام", callback_data="help_info"),
+            InlineKeyboardButton(text="👤 حسابي", callback_data="my_account")
         ]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -66,7 +60,6 @@ def get_admin_message_keyboard(user_id: int) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🚫 حظر المستخدم", callback_data=f"admin_ban_{user_id}")
         ],
         [
-            InlineKeyboardButton(text="➕ شحن نقاط له", callback_data=f"admin_quick_pts_{user_id}"),
             InlineKeyboardButton(text="ℹ️ معلومات المستخدم", callback_data=f"admin_info_{user_id}")
         ]
     ]
@@ -76,7 +69,7 @@ def get_admin_message_keyboard(user_id: int) -> InlineKeyboardMarkup:
 
 @dp.message(CommandStart())
 async def handle_start(message: types.Message):
-    """الترحيب الشامل بالمستخدم في منصة خيال"""
+    """الترحيب بالمستخدم وتسجيله"""
     user = message.from_user
     await db.add_or_update_user(user.id, user.username, user.full_name)
 
@@ -84,21 +77,18 @@ async def handle_start(message: types.Message):
         await message.reply("🚫 <b>عذراً، حسابك محظور من استخدام البوت.</b>")
         return
 
-    pts = await db.get_points(user.id)
     welcome_text = (
-        f"🌌 <b>أهلاً بك في منصة وتطبيق {APP_NAME} المتكامل!</b>\n\n"
-        f"💎 <b>رصيد نقاطك الحالي:</b> <code>{pts:,}</code> نقطة\n\n"
-        "<b>اختر القسم الذي تريد الدخول إليه:</b>\n"
-        "• 🚀 <b>لعبة الطيارة:</b> ضاعف نقاطك واكسب قبل انفجار الطائرة!\n"
-        "• 🎮 <b>ألعاب وتحدي الخصوم:</b> العب X-O فردي أو ابحث عن خصم حقيقي.\n"
-        "• 📻 <b>راديو خيال FM:</b> استمع لأقوى الإذاعات المباشرة ومسجل الصوت.\n"
-        "• 💎 <b>شراء النقاط:</b> باقات شحن متنوعة وهدايا يومية مجانية.\n"
-        "• 📞 <b>المكالمات:</b> تحدث مع الإدارة بصوت وفيديو مباشر.\n"
-        "• ✉️ <b>تواصل فوري:</b> يمكنك إرسال رسالتك أو صورك هنا وسنرد عليك."
+        f"🌌 <b>أهلاً بك في منصة وتواصل {APP_NAME}</b>\n\n"
+        "يسعدنا تواصلك معنا! هنا يمكنك:\n"
+        "• ✉️ إرسال رسائلك واستفساراتك النصية.\n"
+        "• 📸 مشاركة الصور، المقاطع، والملفات.\n"
+        "• 🎙️ إرسال الملاحظات الصوتية الفورية.\n"
+        "• 📞 <b>إجراء مكالمة مباشرة (صوت وفيديو)</b> مع الإدارة داخل تلجرام.\n\n"
+        "<i>اكتب رسالتك الآن وسيقوم فريق خيال بالرد عليك فوراً.</i>"
     )
 
     avatar_path = os.path.join(BASE_DIR, "assets", "avatar.jpg")
-    keyboard = get_user_super_keyboard(name=user.full_name)
+    keyboard = get_user_main_keyboard(name=user.full_name)
 
     if os.path.exists(avatar_path):
         try:
@@ -106,125 +96,107 @@ async def handle_start(message: types.Message):
             await message.answer_photo(photo=photo, caption=welcome_text, reply_markup=keyboard)
             return
         except Exception as e:
-            logger.warning(f"تعذر إرسال الصورة: {e}")
+            logger.warning(f"تعذر إرسال الصورة الرمزية: {e}")
 
     await message.answer(welcome_text, reply_markup=keyboard)
 
-@dp.message(Command("points"))
-@dp.message(Command("balance"))
-async def handle_points_cmd(message: types.Message):
-    """عرض رصيد النقاط"""
+@dp.message(Command("call"))
+async def handle_call_command(message: types.Message):
+    """طلب مكالمة مباشرة"""
     user = message.from_user
-    pts = await db.get_points(user.id)
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [make_miniapp_button("/shop", "🛒 فتح المتجر وشحن النقاط", user.full_name)],
-        [InlineKeyboardButton(text="🎁 استلام الهدية اليومية (+100)", callback_data="claim_daily")]
+    if await db.is_user_banned(user.id):
+        await message.reply("🚫 حسابك محظور.")
+        return
+
+    room_id = f"khayal-{uuid.uuid4().hex[:8]}"
+    await db.create_call_record(room_id, user.id, user.full_name)
+
+    user_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [make_call_button(room_id, "📞 دخول غرفة المكالمة الآن", user.full_name)]
     ])
+
     await message.reply(
-        f"💰 <b>محفظة نقاط خيال الخاصة بك:</b>\n\n"
-        f"• رصيدك: <b>{pts:,}</b> نقطة 💎\n"
-        "يمكنك استخدام نقاطك في لعبة الطيارة، ومباريات التحدي، أو طلب مكالمات مميزة.",
-        reply_markup=kb
+        "🎧 <b>تم إنشاء غرفة المكالمة المباشرة الخاصة بك:</b>\n\n"
+        "اضغط على الزر أدناه لبدء المكالمة الصوتية أو المرئية مباشرة عبر تطبيق الويب المصغر.\n"
+        "<i>تم إرسال إشعار للإدارة للانضمام معك.</i>",
+        reply_markup=user_kb
     )
 
-@dp.message(Command("daily"))
-async def handle_daily_cmd(message: types.Message):
-    """استلام الهدية اليومية عبر الأمر"""
-    user = message.from_user
-    res = await db.claim_daily_bonus(user.id, 100)
-    if res["success"]:
-        await message.reply(f"🎉 {res['message']}\nرصيدك الحالي: <b>{res['points']:,}</b> نقطة!")
-    else:
-        await message.reply(f"⏳ {res['message']}")
-
-@dp.message(Command("crash"))
-async def handle_crash_cmd(message: types.Message):
-    user = message.from_user
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [make_miniapp_button("/crash", "🚀 دخول لعبة الطيارة الآن", user.full_name)]
+    # إشعار المشرفين
+    admin_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [make_call_button(room_id, "📞 انضم للمكالمة كمشرف", "المشرف")],
+        [InlineKeyboardButton(text="🚫 حظر المستخدم", callback_data=f"admin_ban_{user.id}")]
     ])
-    await message.reply(
-        "🚀 <b>لعبة الطيارة (Crash / Aviator):</b>\n"
-        "ضع رهانك من النقاط، راقب تصاعد الطائرة والمضاعف، واسحب أرباحك قبل أن تنفجر!",
-        reply_markup=kb
-    )
 
-@dp.message(Command("games"))
-async def handle_games_cmd(message: types.Message):
-    user = message.from_user
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [make_miniapp_button("/games", "🎮 فتح صالة الألعاب والتحدي", user.full_name)]
-    ])
-    await message.reply("🎮 <b>ألعاب خيال:</b> العب X-O وتحدَّ الذكاء الاصطناعي أو نافس خصوماً أونلاين!", reply_markup=kb)
-
-@dp.message(Command("radio"))
-async def handle_radio_cmd(message: types.Message):
-    user = message.from_user
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [make_miniapp_button("/radio", "📻 تشغيل راديو خيال FM", user.full_name)]
-    ])
-    await message.reply("📻 <b>راديو خيال FM:</b> استمع لأقوى المحطات الحية (القرآن، نجوم، روتانا، أخبار، ولوفاي).", reply_markup=kb)
-
-@dp.message(Command("addpoints"))
-async def handle_addpoints_cmd(message: types.Message):
-    """أمر إداري لإضافة أو خصم نقاط من أي مستخدم: /addpoints 123456 1000"""
-    if message.from_user.id not in ADMIN_IDS:
-        return
-    parts = message.text.split()
-    if len(parts) < 3 or not parts[1].isdigit() or not (parts[2].isdigit() or (parts[2].startswith("-") and parts[2][1:].isdigit())):
-        await message.reply("⚠️ الاستخدام الصحيح:\n<code>/addpoints 123456789 1000</code>")
-        return
-    
-    target_id = int(parts[1])
-    amount = int(parts[2])
-    new_pts = await db.update_points(target_id, amount, "admin_grant", "تعديل رصيد من الإدارة")
-    await message.reply(f"✅ تم تعديل رصيد المستخدم <code>{target_id}</code> بمقدار <b>{amount:+}</b> نقطة.\nالرصيد الحالي: <b>{new_pts:,}</b> نقطة.")
-    
-    # إشعار المستخدم
-    try:
-        if amount > 0:
-            await bot.send_message(target_id, f"🎁 <b>مبروك! قامت إدارة خيال بإضافة {amount:,} نقطة إلى رصيدك.</b>\nرصيدك الإجمالي: <b>{new_pts:,}</b> نقطة 💎")
-    except Exception:
-        pass
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_message(
+                chat_id=admin_id,
+                text=(
+                    f"🚨 <b>طلب مكالمة صوت وفيديو مباشر!</b>\n\n"
+                    f"👤 <b>المرسل:</b> {user.full_name} (@{user.username or 'بدون'})\n"
+                    f"🆔 <b>الآيدي:</b> <code>{user.id}</code>\n"
+                    f"🔑 <b>الغرفة:</b> <code>{room_id}</code>"
+                ),
+                reply_markup=admin_kb
+            )
+        except Exception as e:
+            logger.error(f"فشل إشعار المشرف {admin_id}: {e}")
 
 @dp.message(Command("stats"))
 async def handle_stats(message: types.Message):
+    """إحصائيات المنصة (خاص بالمشرفين)"""
     if message.from_user.id not in ADMIN_IDS:
         return
+
     stats = await db.get_stats()
     text = (
-        "📊 <b>إحصائيات منصة خيال الشاملة:</b>\n\n"
+        "📊 <b>إحصائيات منصة خيال:</b>\n\n"
         f"👥 <b>إجمالي المستخدمين:</b> {stats['total_users']}\n"
-        f"💎 <b>إجمالي النقاط المتداولة:</b> {stats.get('total_points', 0):,} نقطة\n"
-        f"💬 <b>الرسائل المتبادلة:</b> {stats['total_messages']}\n"
-        f"📞 <b>المكالمات:</b> {stats['total_calls']}\n"
-        f"🚫 <b>المحظورين:</b> {stats['banned_users']}"
+        f"🚫 <b>المحظورين:</b> {stats['banned_users']}\n"
+        f"💬 <b>إجمالي الرسائل المتبادلة:</b> {stats['total_messages']}\n"
+        f"📞 <b>إجمالي المكالمات:</b> {stats['total_calls']}"
     )
     await message.reply(text)
 
 @dp.message(Command("broadcast"))
 async def handle_broadcast(message: types.Message):
+    """إذاعة رسالة لجميع المشتركين (خاص بالمشرفين)"""
     if message.from_user.id not in ADMIN_IDS:
         return
+
+    # استخراج نص الرسالة بعد الأمر /broadcast
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        await message.reply("⚠️ اكتب الرسالة بعد الأمر:\n<code>/broadcast مرحباً بكم في خيال</code>")
+        await message.reply("⚠️ يرجى كتابة نص الرسالة بعد الأمر:\n<code>/broadcast مرحباً بكم جميعاً</code>")
         return
+
     broadcast_text = parts[1]
     users = await db.get_all_users()
-    sent = 0
-    fail = 0
-    st = await message.reply(f"⏳ جاري الإذاعة إلى {len(users)} مشترك...")
+    sent_count = 0
+    fail_count = 0
+
+    status_msg = await message.reply(f"⏳ جاري الإذاعة إلى {len(users)} مشترك...")
+
     for uid in users:
         try:
-            await bot.send_message(uid, f"📢 <b>إعلان من إدارة خيال:</b>\n\n{broadcast_text}")
-            sent += 1
+            await bot.send_message(
+                chat_id=uid,
+                text=f"📢 <b>إعلان من إدارة خيال:</b>\n\n{broadcast_text}"
+            )
+            sent_count += 1
         except Exception:
-            fail += 1
-    await st.edit_text(f"✅ تمت الإذاعة بنجاح:\n• تم الإرسال: {sent}\n• فشل (حظروا البوت): {fail}")
+            fail_count += 1
+
+    await status_msg.edit_text(
+        f"✅ <b>اكتملت الإذاعة:</b>\n"
+        f"• تم الإرسال بنجاح: {sent_count}\n"
+        f"• تعذر الإرسال (حظروا البوت): {fail_count}"
+    )
 
 @dp.message(Command("ban"))
 async def handle_ban_cmd(message: types.Message):
+    """حظر مستخدم عبر الآيدي"""
     if message.from_user.id not in ADMIN_IDS:
         return
     parts = message.text.split()
@@ -233,10 +205,11 @@ async def handle_ban_cmd(message: types.Message):
         return
     target_id = int(parts[1])
     await db.set_user_ban(target_id, True)
-    await message.reply(f"✅ تم حظر المستخدم <code>{target_id}</code>.")
+    await message.reply(f"✅ تم حظر المستخدم <code>{target_id}</code> بنجاح.")
 
 @dp.message(Command("unban"))
 async def handle_unban_cmd(message: types.Message):
+    """إلغاء حظر مستخدم"""
     if message.from_user.id not in ADMIN_IDS:
         return
     parts = message.text.split()
@@ -245,22 +218,25 @@ async def handle_unban_cmd(message: types.Message):
         return
     target_id = int(parts[1])
     await db.set_user_ban(target_id, False)
-    await message.reply(f"✅ تم إلغاء حظر المستخدم <code>{target_id}</code>.")
+    await message.reply(f"✅ تم إلغاء حظر المستخدم <code>{target_id}</code> بنجاح.")
 
-# =================== معالجة الرسائل العادية ===================
+# =================== معالجة الرسائل والردود ===================
 
 @dp.message(F.chat.type == "private")
 async def handle_all_messages(message: types.Message):
+    """معالجة جميع أنواع الرسائل (نصوص، صور، فويس، فيديو، ملفات)"""
     sender = message.from_user
     is_admin = sender.id in ADMIN_IDS
 
-    # رد المشرف
+    # 1. إذا كان المرسل هو المشرف ويقوم بعمل Reply للرد على رسالة
     if is_admin and message.reply_to_message:
         reply_to_id = message.reply_to_message.message_id
         mapping = await db.get_user_by_admin_message(reply_to_id, message.chat.id)
+
         if mapping:
             target_user_id = mapping["user_id"]
             try:
+                # إرسال إشعار ومحتوى الرد للمستخدم
                 await bot.send_message(
                     chat_id=target_user_id,
                     text="💬 <b>رد وارد من إدارة خيال:</b>",
@@ -271,43 +247,51 @@ async def handle_all_messages(message: types.Message):
                     from_chat_id=message.chat.id,
                     message_id=message.message_id
                 )
-                await message.reply("✅ <b>تم تسليم ردك للمستخدم بنجاح!</b>")
+                await message.reply("✅ <b>تم إرسال ردك إلى المستخدم بنجاح!</b>")
                 return
             except Exception as e:
-                await message.reply(f"❌ تعذر التسليم: {e}")
+                await message.reply(f"❌ تعذر تسليم الرد (قد يكون المستخدم حظر البوت): {e}")
                 return
 
+    # إذا كان المشرف يرسل رسالة عادية غير رد
     if is_admin:
         await message.reply(
-            "👑 <b>لوحة المشرف:</b> للرد على أي مستخدم، قم بعمل (Reply) على رسالته المحولة.\n"
-            "الأوامر المتاحة: /stats, /broadcast, /addpoints, /ban, /unban"
+            "👑 <b>أنت في وضع المشرف.</b>\n"
+            "للرد على أي مستخدم، قم بعمل <b>Reply</b> (رد مباشر) على رسالته المحولة.\n"
+            "أو استخدم الأوامر: /stats, /broadcast, /ban, /unban"
         )
         return
 
-    # المستخدم العادي
+    # 2. المستخدم العادي يرسل رسالة
     if await db.is_user_banned(sender.id):
-        await message.reply("🚫 حسابك محظور من التواصل.")
+        await message.reply("🚫 لا يمكنك إرسال رسائل، حسابك محظور.")
         return
 
     await db.add_or_update_user(sender.id, sender.username, sender.full_name)
 
-    header = (
-        "📩 <b>رسالة جديدة واردة عبر خيال</b>\n"
-        f"👤 <b>المرسل:</b> {sender.full_name} (@{sender.username or 'بدون'})\n"
+    # توجيه الرسالة لكافة المشرفين
+    forward_header = (
+        "📩 <b>رسالة واردة جديدة عبر خيال</b>\n"
+        f"👤 <b>المرسل:</b> {sender.full_name}\n"
+        f"🔗 <b>المعرف:</b> @{sender.username or 'بدون'}\n"
         f"🆔 <b>الآيدي:</b> <code>{sender.id}</code>\n"
         "------------------------------------"
     )
+
     admin_kb = get_admin_message_keyboard(sender.id)
 
     for admin_id in ADMIN_IDS:
         try:
-            await bot.send_message(chat_id=admin_id, text=header)
+            # إرسال البطاقة التعريفية
+            await bot.send_message(chat_id=admin_id, text=forward_header)
+            # نسخ الرسالة كاملة (نص، صورة، صوت، فيديو، مستند...)
             admin_msg = await bot.copy_message(
                 chat_id=admin_id,
                 from_chat_id=message.chat.id,
                 message_id=message.message_id,
                 reply_markup=admin_kb
             )
+            # حفظ الربط للرد التلقائي
             await db.save_message_mapping(
                 user_id=sender.id,
                 user_message_id=message.message_id,
@@ -315,100 +299,44 @@ async def handle_all_messages(message: types.Message):
                 admin_chat_id=admin_id
             )
         except Exception as e:
-            logger.error(f"خطأ تحويل الرسالة للمشرف {admin_id}: {e}")
+            logger.error(f"خطأ في تحويل الرسالة للمشرف {admin_id}: {e}")
 
-    await message.reply("✅ <b>تم استلام رسالتك بنجاح!</b>\nسيقوم فريق خيال بالرد عليك قريباً.")
+    # تأكيد الاستلام للمستخدم
+    await message.reply(
+        "✅ <b>تم استلام رسالتك بنجاح!</b>\n"
+        "سيقوم فريق خيال بمراجعتها والرد عليك هنا في أقرب وقت."
+    )
 
-# =================== استجابات الـ Callbacks ===================
-
-@dp.callback_query(F.data == "claim_daily")
-async def cb_claim_daily(query: CallbackQuery):
-    res = await db.claim_daily_bonus(query.from_user.id, 100)
-    await query.answer(res["message"], show_alert=True)
-
-@dp.callback_query(F.data == "my_balance")
-async def cb_my_balance(query: CallbackQuery):
-    pts = await db.get_points(query.from_user.id)
-    await query.answer(f"رصيدك الحالي: {pts:,} نقطة 💎", show_alert=True)
+# =================== أزرار Inline Callbacks ===================
 
 @dp.callback_query(F.data == "help_info")
 async def cb_help_info(query: CallbackQuery):
     await query.answer()
-    info = (
-        f"✨ <b>منصة {APP_NAME} الشاملة:</b>\n\n"
-        "• 🚀 <b>لعبة الطيارة:</b> العب واربح نقاط حقيقية.\n"
-        "• 🎮 <b>ألعاب الخصوم:</b> مباريات X-O أونلاين ضد لاعبين.\n"
-        "• 📻 <b>راديو FM:</b> بث حي لإذاعات القرآن والموسيقى والأخبار.\n"
-        "• 📞 <b>مكالمات WebRTC:</b> صوت وفيديو بدقة فائقة.\n"
-        "• 💎 <b>متجر النقاط:</b> شحن وهدايا يومية مجانية."
+    info_text = (
+        "✨ <b>حول منصة وبوت خيال (Khayal):</b>\n\n"
+        "• يمكنك محادثتنا نصياً ومشاركة أي صور أو تسجيلات صوتية.\n"
+        "• للمكالمات: اضغط على زر 'مكالمة خيال' لبدء مكالمة صوت وفيديو مباشرة داخل تطبيق تلجرام.\n"
+        "• جميع محادثاتك ومكالماتك مشفرة ومحمية بالكامل."
     )
-    await query.message.answer(info)
+    await query.message.answer(info_text)
 
-@dp.callback_query(F.data.startswith("approve_pts_"))
-async def cb_approve_points(query: CallbackQuery):
-    """موافقة المشرف على طلب شحن نقاط"""
-    if query.from_user.id not in ADMIN_IDS:
-        await query.answer("غير مصرح لك.", show_alert=True)
-        return
-
-    req_id = int(query.data.replace("approve_pts_", ""))
-    req = await db.get_point_request(req_id)
-    if not req or req["status"] != "pending":
-        await query.answer("هذا الطلب تمت معالجته مسبقاً!", show_alert=True)
-        return
-
-    # شحن النقاط
-    new_pts = await db.update_points(req["user_id"], req["points"], "store_purchase", f"شحن باقة {req['package_name']}")
-    await db.set_point_request_status(req_id, "approved")
-    await query.answer("تم قبول الطلب وشحن النقاط بنجاح!", show_alert=True)
-    await query.message.edit_text(
-        f"✅ <b>تم قبول طلب الشحن #{req_id} بنجاح!</b>\n"
-        f"تمت إضافة <b>{req['points']:,}</b> نقطة لحساب المستخدم <code>{req['user_id']}</code>.\n"
-        f"رصيده الحالي: <b>{new_pts:,}</b> نقطة."
+@dp.callback_query(F.data == "my_account")
+async def cb_my_account(query: CallbackQuery):
+    await query.answer()
+    user = query.from_user
+    acc_text = (
+        "👤 <b>معلومات حسابك في خيال:</b>\n\n"
+        f"• <b>الاسم:</b> {user.full_name}\n"
+        f"• <b>المعرف:</b> @{user.username or 'لا يوجد'}\n"
+        f"• <b>الآيدي:</b> <code>{user.id}</code>\n"
+        "• <b>الحالة:</b> نشط ومصرح 🟢"
     )
-
-    # إشعار العميل في تلجرام
-    try:
-        await bot.send_message(
-            chat_id=req["user_id"],
-            text=(
-                f"🎉 <b>مبروك! تم تأكيد وشحن باقتك في خيال بنجاح:</b>\n\n"
-                f"📦 <b>الباقة:</b> {req['package_name']}\n"
-                f"💎 <b>النقاط المضافة:</b> +{req['points']:,} نقطة\n"
-                f"💰 <b>رصيدك الجديد:</b> {new_pts:,} نقطة 💎\n\n"
-                "<i>نتمنى لك وقتاً ممتعاً في ألعاب خيال ومكالماتها!</i>"
-            )
-        )
-    except Exception as e:
-        logger.error(f"فشل إشعار المستخدم بالشحن: {e}")
-
-@dp.callback_query(F.data.startswith("reject_pts_"))
-async def cb_reject_points(query: CallbackQuery):
-    """رفض طلب شحن النقاط"""
-    if query.from_user.id not in ADMIN_IDS:
-        await query.answer("غير مصرح لك.", show_alert=True)
-        return
-
-    req_id = int(query.data.replace("reject_pts_", ""))
-    await db.set_point_request_status(req_id, "rejected")
-    await query.answer("تم رفض الطلب.", show_alert=True)
-    await query.message.edit_text(f"❌ <b>تم رفض طلب الشحن #{req_id}.</b>")
-
-@dp.callback_query(F.data.startswith("admin_quick_pts_"))
-async def cb_admin_quick_pts(query: CallbackQuery):
-    if query.from_user.id not in ADMIN_IDS:
-        return
-    uid = int(query.data.replace("admin_quick_pts_", ""))
-    new_pts = await db.update_points(uid, 500, "admin_grant", "هدية سريعة 500 نقطة")
-    await query.answer(f"تمت إضافة 500 نقطة! الرصيد: {new_pts}", show_alert=True)
-    try:
-        await bot.send_message(uid, f"🎁 حصلت على 500 نقطة هدية من الإدارة! رصيدك: {new_pts:,} نقطة 💎")
-    except Exception:
-        pass
+    await query.message.answer(acc_text)
 
 @dp.callback_query(F.data.startswith("admin_ban_"))
 async def cb_admin_ban(query: CallbackQuery):
     if query.from_user.id not in ADMIN_IDS:
+        await query.answer("غير مصرح لك.", show_alert=True)
         return
     target_id = int(query.data.replace("admin_ban_", ""))
     await db.set_user_ban(target_id, True)
@@ -418,36 +346,37 @@ async def cb_admin_ban(query: CallbackQuery):
 @dp.callback_query(F.data.startswith("admin_info_"))
 async def cb_admin_info(query: CallbackQuery):
     if query.from_user.id not in ADMIN_IDS:
+        await query.answer("غير مصرح.", show_alert=True)
         return
     target_id = int(query.data.replace("admin_info_", ""))
-    pts = await db.get_points(target_id)
     await query.answer()
     await query.message.reply(
         f"ℹ️ <b>معلومات المستخدم:</b>\n"
         f"• <b>الآيدي:</b> <code>{target_id}</code>\n"
-        f"• <b>النقاط:</b> {pts:,} نقطة 💎\n"
         f"• <b>الرابط المباشر:</b> tg://user?id={target_id}"
     )
 
 @dp.callback_query(F.data.startswith("admin_call_"))
 async def cb_admin_call(query: CallbackQuery):
     if query.from_user.id not in ADMIN_IDS:
+        await query.answer("غير مصرح.", show_alert=True)
         return
     target_id = int(query.data.replace("admin_call_", ""))
     room_id = f"khayal-{uuid.uuid4().hex[:8]}"
 
+    # إرسال رابط المكالمة للمستخدم
     user_call_kb = InlineKeyboardMarkup(inline_keyboard=[
-        [make_miniapp_button(f"/call?room={room_id}", "📞 قبول ودخول المكالمة", "مستخدم")]
+        [make_call_button(room_id, "📞 قبول ودخول المكالمة المباشرة", "مستخدم")]
     ])
     try:
         await bot.send_message(
             chat_id=target_id,
-            text="📞 <b>إدارة خيال تدعوك لمكالمة صوت/فيديو مباشرة!</b>\nاضغط على الزر أدناه للدخول فوراً:",
+            text="📞 <b>إدارة خيال تدعوك لمكالمة صوت/فيديو مباشرة!</b>\nاضغط على الزر أدناه للانضمام فوراً:",
             reply_markup=user_call_kb
         )
         admin_call_kb = InlineKeyboardMarkup(inline_keyboard=[
-            [make_miniapp_button(f"/call?room={room_id}", "📞 دخول غرفة المكالمة الآن", "المشرف")]
+            [make_call_button(room_id, "📞 دخول غرفة المكالمة الآن", "المشرف")]
         ])
         await query.message.reply("✅ تم إرسال دعوة المكالمة للمستخدم!", reply_markup=admin_call_kb)
     except Exception as e:
-        await query.message.reply(f"❌ تعذر إرسال الدعوة: {e}")
+        await query.message.reply(f"❌ تعذر إرسال الدعوة للمستخدم: {e}")
