@@ -1,76 +1,78 @@
 import sys
+import asyncio
+import logging
 
-# ضمان دعم ترميز UTF-8 على أنظمة Windows لمنع أخطاء الرموز التعبيرية
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-import asyncio
-import logging
 from aiohttp import web
-from src.config import BOT_TOKEN, ADMIN_IDS, PORT, HOST, BASE_URL, APP_NAME
-from src.db import init_db
-from src.server import create_app
-from src.bot import bot, dp
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.fsm.storage.memory import MemoryStorage
 
-# إعداد السجلات (Logging)
+from config import BOT_TOKEN
+from database import init_db
+from handlers import common, group_guard, support, radio, random_chat, complaints, developer_zalzala
+from src.server import create_app
+from src.config import PORT, HOST, BASE_URL
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - [%(levelname)s] - %(name)s: %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)]
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
-logger = logging.getLogger("KhayalMain")
+logger = logging.getLogger("KhayalUnified")
+
 
 async def start_web_server():
-    """تشغيل خادم الويب وتطبيق Mini App وإشارات WebRTC"""
     app = create_app()
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, HOST, PORT)
     await site.start()
-    logger.info(f"خادم تطبيق خيال يعمل الآن على: http://{HOST}:{PORT}")
-    logger.info(f"رابط Mini App والمكالمات: {BASE_URL}")
+    logger.info("Khayal web/Mini App server: %s", BASE_URL)
     return runner
 
+
+def build_dispatcher():
+    dp = Dispatcher(storage=MemoryStorage())
+    # هذه هي النسخة الوحيدة الفعالة من معالجات البوت الآن.
+    dp.include_router(common.router)
+    dp.include_router(developer_zalzala.router)
+    dp.include_router(group_guard.router)
+    dp.include_router(support.router)
+    dp.include_router(radio.router)
+    dp.include_router(random_chat.router)
+    dp.include_router(complaints.router)
+    return dp
+
+
 async def main():
-    print("=" * 50)
-    print(f"    منصة وبوت تواصل {APP_NAME}")
-    print("=" * 50)
+    if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
+        raise RuntimeError("BOT_TOKEN is not configured")
 
-    # 1. تهيئة قاعدة البيانات
-    logger.info("جاري تهيئة قاعدة البيانات المحلية SQLite...")
     await init_db()
-    logger.info("قاعدة البيانات جاهزة بنجاح.")
-
-    # 2. تشغيل خادم الويب
     web_runner = await start_web_server()
 
-    # 3. تشغيل بوت تلجرام
-    if not BOT_TOKEN or BOT_TOKEN == "YOUR_TELEGRAM_BOT_TOKEN_HERE":
-        logger.warning("=" * 60)
-        logger.warning("تنبيه: لم يتم تعيين BOT_TOKEN في ملف .env حتى الآن!")
-        logger.warning("خادم المكالمات وتطبيق الويب يعمل، لكن البوت لن يعمل حتى تضع التوكن.")
-        logger.warning("يرجى نسخ .env.example إلى .env ووضع توكن البوت ومعرف المشرف.")
-        logger.warning("=" * 60)
-        # إبقاء خادم الويب يعمل
-        while True:
-            await asyncio.sleep(3600)
-    else:
-        logger.info(f"جاري تشغيل بوت تلجرام للمشرفين: {ADMIN_IDS}")
-        try:
-            # حذف أي Webhook قديم لتفادي التعارض مع Polling
-            await bot.delete_webhook(drop_pending_updates=True)
-            logger.info("البوت متصل وجاهز لاستقبال الرسائل والمكالمات!")
-            await dp.start_polling(bot)
-        except Exception as e:
-            logger.error(f"حدث خطأ أثناء تشغيل البوت: {e}")
-        finally:
-            await bot.session.close()
-            await web_runner.cleanup()
+    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN))
+    dp = build_dispatcher()
+
+    try:
+        # يمنع تشغيل webhook/نسخة قديمة بالتوازي مع النسخة الحالية.
+        await bot.delete_webhook(drop_pending_updates=True)
+        me = await bot.get_me()
+        logger.info("Unified bot started: @%s (%s)", me.username, me.id)
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    finally:
+        await bot.session.close()
+        await web_runner.cleanup()
+
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        logger.info("تم إيقاف تشغيل النظام.")
+        logger.info("Bot stopped")

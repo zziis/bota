@@ -1,0 +1,4 @@
+KHAYAL-UNIFIED-2026-09-19
+Entry point: python main.py
+Telegram handlers: handlers/* only
+Web/Mini App server: src/server.py

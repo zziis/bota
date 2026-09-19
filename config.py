@@ -1,4 +1,4 @@
-﻿import os
+import os
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -17,7 +17,10 @@ SUPPORT_CHANNEL = os.getenv("SUPPORT_CHANNEL", "")
 
 # WebApp / Capsule URL
 # The WebApp capsule can be hosted locally via server.py or hosted online
-WEBAPP_URL = os.getenv("WEBAPP_URL", "http://localhost:8080")
+_public_base = os.getenv("BASE_URL", "").strip().rstrip("/")
+if _public_base and not _public_base.startswith(("https://", "http://")):
+    _public_base = "https://" + _public_base
+WEBAPP_URL = os.getenv("WEBAPP_URL", _public_base or "http://localhost:8080")
 
 # Database Path
 DB_PATH = BASE_DIR / "okar_database.sqlite"
