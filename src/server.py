@@ -491,10 +491,17 @@ def create_app():
     app.router.add_static("/images", f"{STATIC_DIR}/images")
 
     async def index_handler(request):
-        return web.FileResponse(f"{STATIC_DIR}/index.html")
+        response = web.FileResponse(f"{STATIC_DIR}/index.html")
+        # Telegram WebView caches aggressively; always revalidate the app shell.
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
 
     async def ended_handler(request):
-        return web.FileResponse(f"{STATIC_DIR}/call-ended.html")
+        response = web.FileResponse(f"{STATIC_DIR}/call-ended.html")
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        return response
 
     app.router.add_get("/", index_handler)
     app.router.add_get("/call", index_handler)
